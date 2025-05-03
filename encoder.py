@@ -76,7 +76,7 @@ def encode_video(input_path, output_path, total_idx, total_count, summary_path):
 
     # Construir comando ffmpeg
     cmd = ['ffmpeg', '-i', str(input_path),
-           '-c:v', 'libsvtav1', '-crf', '32', '-preset', '2']
+           '-c:v', 'libsvtav1', '-crf', '30', '-preset', '4']
     if output_fps:
         cmd += ['-r', str(output_fps)]
     cmd += ['-c:a', 'copy', '-map_metadata', '0',
@@ -147,6 +147,7 @@ def main():
     output_dir.mkdir(exist_ok=True)
 
     videos = [f for f in base_dir.iterdir() if f.suffix.lower() in VIDEO_EXTS and f.is_file()]
+    videos = sorted(videos)
     total = len(videos)
     if total == 0:
         print("No se encontraron archivos de video para procesar.")

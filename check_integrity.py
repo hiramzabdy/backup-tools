@@ -105,7 +105,7 @@ def main():
         # Comprobación de tiempo
         if args.mode in ['time', 'both']:
             orig_stem = av1.stem[:-4] if av1.stem.endswith('_av1') else av1.stem
-            orig = base / (orig_stem + av1.suffix)
+            orig = base / (orig_stem + '.mp4') #av1.suffix
 
             dur_av1 = get_duration(av1)
             dur_orig = get_duration(orig) if orig.exists() else None
