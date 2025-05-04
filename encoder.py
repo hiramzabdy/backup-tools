@@ -76,7 +76,7 @@ def encode_video(input_path, output_path, total_idx, total_count, summary_path):
 
     # Construir comando ffmpeg
     cmd = ['ffmpeg', '-i', str(input_path),
-           '-c:v', 'libsvtav1', '-crf', '30', '-preset', '4']
+           '-c:v', 'libx265', '-crf', '24', '-preset', 'medium'] #ultrafast, superfast, veryfast, faster, fast, medium (64), slow, slower, veryslow (4fps), placebo
     if output_fps:
         cmd += ['-r', str(output_fps)]
     cmd += ['-c:a', 'copy', '-map_metadata', '0',
@@ -132,7 +132,7 @@ def encode_video(input_path, output_path, total_idx, total_count, summary_path):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Codifica videos a AV1 usando libsvt-av1')
+    parser = argparse.ArgumentParser(description='Codifica videos a HEVC usando libx265')
     parser.add_argument('input_dir', help='Directorio con videos a procesar')
     args = parser.parse_args()
 
@@ -143,7 +143,7 @@ def main():
 
     summary_log = base_dir / 'summary.log'
 
-    output_dir = base_dir / 'vid_av1'
+    output_dir = base_dir / 'output'
     output_dir.mkdir(exist_ok=True)
 
     videos = [f for f in base_dir.iterdir() if f.suffix.lower() in VIDEO_EXTS and f.is_file()]
@@ -154,7 +154,7 @@ def main():
         return
 
     for idx, vid in enumerate(videos, start=1):
-        name = vid.stem + '_av1'
+        name = vid.stem + '_hevc'
         out_file = output_dir / (name + '.mkv') # or vid.suffix
         print(f"[{idx}/{total}] Procesando: {vid.name}")
         if out_file.exists():

@@ -34,7 +34,7 @@ def get_duration(path):
         return None
 
 
-def validate_decode(av1_path):
+def validate_decode(output_path):
     """
     Prueba de decodificación usando el decoder interno de FFmpeg para AV1.
     Forzamos el codec de decodificación software con '-c:v av1'.
@@ -45,8 +45,8 @@ def validate_decode(av1_path):
     cmd = [
         'ffmpeg',
         '-v', 'error',
-        '-c:v', 'av1',    # forzar decoder interno AV1 en software
-        '-i', str(av1_path),
+        '-c:v', 'hevc',
+        '-i', str(output_path),
         '-f', 'null',
         '-'
     ]
@@ -61,7 +61,8 @@ def main():
     parser = argparse.ArgumentParser(
         description='Valida integridad de videos AV1 en vid_av1/'
     )
-    parser.add_argument('base_dir', help='Directorio raíz con vid_av1/')
+    parser.add_argument('base_dir', help='Directorio raíz con videos originales/')
+    parser.add_argument('output_dir', help='Directorio raíz con videos codificados/')
     parser.add_argument(
         'mode',
         choices=['time', 'code', 'both'],
@@ -73,24 +74,50 @@ def main():
     )
     args = parser.parse_args()
 
-    base = Path(args.base_dir)
-    av1_dir = base / 'vid_av1'
-    if not av1_dir.is_dir():
-        print(f"La carpeta {av1_dir} no existe o no es un directorio.")
+    base_dir = Path(args.base_dir)
+    output_dir = Path(args.output_dir)
+
+    if not output_dir.is_dir() or not base_dir.is_dir():
+        print(f"Uno de los dos directorios no existe.")
         sys.exit(1)
 
-    av1_files = sorted([f for f in av1_dir.iterdir() if f.is_file()])
-    total = len(av1_files)
+    coded_videos = sorted([f for f in output_dir.iterdir() if f.is_file()])    
+    total = len(coded_videos)
+
     if total == 0:
-        print("No se encontraron archivos en vid_av1/.")
+        print("No se encontraron archivos en " + output_dir + ".")
         return
 
-    for idx, av1 in enumerate(av1_files, start=1):
-        print(f"[{idx}/{total}] ==> {av1.name}")
+    for idx, vid in enumerate(coded_videos, start=1):
+        print(f"[{idx}/{total}] ==> {vid.name}")
+
+        # Comprobación de tiempo
+        if args.mode in ['time', 'both']:
+            orig_stem = vid.stem[:-5] if vid.stem.endswith('_hevc') else vid.stem
+            orig = base_dir / (orig_stem + '.mp4')
+
+            dur_vid = get_duration(vid)
+            dur_orig = get_duration(orig)
+
+            if dur_vid is None:
+                print(f"  {YELLOW}[WARN]{RESET} No se pudo leer duración de HEVC.")
+            elif dur_orig is None:
+                print(f"  {YELLOW}[WARN]{RESET} Original no encontrado para comparar duración.")
+            else:
+                diff = abs(dur_vid - dur_orig)
+                mmss_orig = seconds_to_mmss(dur_orig)
+                mmss_av1 = seconds_to_mmss(dur_vid)
+                if diff <= args.margin:
+                    print(f"  {GREEN}[OK]{RESET} Duración OK (orig: {mmss_orig}, av1: {mmss_av1}).")
+                else:
+                    print(
+                        f"  {RED}[ERROR]{RESET} Duración difiere más de {args.margin}s: "
+                        f"orig {mmss_orig}, av1 {mmss_av1}."
+                    )
 
         # Comprobación de decodificación
         if args.mode in ['code', 'both']:
-            ok_decode, errors = validate_decode(av1)
+            ok_decode, errors = validate_decode(vid)
             if ok_decode:
                 print(f"  {GREEN}[OK]{RESET} Decodificación correcta.")
             else:
@@ -101,30 +128,6 @@ def main():
                     continue
                 if args.mode == 'both':
                     continue
-
-        # Comprobación de tiempo
-        if args.mode in ['time', 'both']:
-            orig_stem = av1.stem[:-4] if av1.stem.endswith('_av1') else av1.stem
-            orig = base / (orig_stem + '.mp4') #av1.suffix
-
-            dur_av1 = get_duration(av1)
-            dur_orig = get_duration(orig) if orig.exists() else None
-
-            if dur_av1 is None:
-                print(f"  {YELLOW}[WARN]{RESET} No se pudo leer duración de AV1.")
-            elif dur_orig is None:
-                print(f"  {YELLOW}[WARN]{RESET} Original no encontrado para comparar duración.")
-            else:
-                diff = abs(dur_av1 - dur_orig)
-                mmss_orig = seconds_to_mmss(dur_orig)
-                mmss_av1 = seconds_to_mmss(dur_av1)
-                if diff <= args.margin:
-                    print(f"  {GREEN}[OK]{RESET} Duración OK (orig: {mmss_orig}, av1: {mmss_av1}).")
-                else:
-                    print(
-                        f"  {RED}[ERROR]{RESET} Duración difiere más de {args.margin}s: "
-                        f"orig {mmss_orig}, av1 {mmss_av1}."
-                    )
 
 if __name__ == '__main__':
     main()
