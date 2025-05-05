@@ -57,6 +57,7 @@ def get_frame_rate(path):
 
 
 def log_status(summary_path, video_name, status, error_lines=None):
+    pass
     with open(summary_path, 'a', encoding='utf-8') as f:
         if status == 'OK':
             f.write(f"{video_name} => [OK]\n")
@@ -76,7 +77,7 @@ def encode_video(input_path, output_path, total_idx, total_count, summary_path):
 
     # Construir comando ffmpeg
     cmd = ['ffmpeg', '-i', str(input_path),
-           '-c:v', 'libx265', '-crf', '24', '-preset', 'medium'] #ultrafast, superfast, veryfast, faster, fast, medium (64), slow, slower, veryslow (4fps), placebo
+           '-c:v', 'libx265', '-crf', '24', '-preset', 'slow'] #ultrafast, superfast, veryfast, faster, fast, medium (64), slow, slower, veryslow (4fps), placebo
     if output_fps:
         cmd += ['-r', str(output_fps)]
     cmd += ['-c:a', 'copy', '-map_metadata', '0',

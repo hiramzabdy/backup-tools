@@ -59,7 +59,7 @@ def validate_decode(output_path):
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Valida integridad de videos AV1 en vid_av1/'
+        description='Valida integridad de videos codificados HEVC'
     )
     parser.add_argument('base_dir', help='Directorio raíz con videos originales/')
     parser.add_argument('output_dir', help='Directorio raíz con videos codificados/')
@@ -69,7 +69,7 @@ def main():
         help='Tipo de comprobación: time, code o both'
     )
     parser.add_argument(
-        '--margin', type=float, default=1.0,
+        '--margin', type=float, default=0.1,
         help='Margen de diferencia de duración en segundos (default: 1s)'
     )
     args = parser.parse_args()
