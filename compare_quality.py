@@ -4,6 +4,7 @@ import subprocess
 import argparse
 from pathlib import Path
 import re
+from datetime import datetime
 
 def get_bitrate_mbps(path: Path) -> float:
     """Get or estimate video bitrate in Mbps."""
@@ -64,12 +65,21 @@ def get_ssim(orig: Path, comp: Path) -> float:
     m = re.search(r'All:(0\.?\d*)', res.stderr)
     return float(m.group(1)) if m else 0.0
 
+def log_result(logfile, result):
+    with open(logfile, 'a', encoding='utf-8') as f:
+        if result:
+            f.write(f"{result}\n")
 
 def main():
     parser = argparse.ArgumentParser(description='Comparar bitrate, PSNR y SSIM entre dos directorios de video')
     parser.add_argument('dir1', help='Directorio original')
     parser.add_argument('dir2', help='Directorio codificado')
     args = parser.parse_args()
+
+    date_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+    logfile_name = Path(args.dir2).name
+
+    log_result(f"./{logfile_name}.log", date_time)
 
     d1 = Path(args.dir1)
     d2 = Path(args.dir2)
@@ -92,7 +102,9 @@ def main():
         br2 = get_bitrate_mbps(comp)
         psnr = get_psnr(orig, comp)
         ssim = get_ssim(orig, comp)
-        print(f"{orig.name}: {br1:.2f} Mbps => {br2:.2f} Mbps, PSNR={psnr:.2f} dB, SSIM={ssim:.4f}")
+        result = (f"{orig.name}: {br1:.2f} Mbps => {br2:.2f} Mbps, PSNR={psnr:.2f} dB, SSIM={ssim:.4f}")
+        log_result(f"./{logfile_name}.log", result)
+        print(result)
 
 if __name__ == '__main__':
     main()

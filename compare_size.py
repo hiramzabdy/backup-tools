@@ -45,7 +45,7 @@ def main():
             orig_stem = stem[:-5]
         else:
             orig_stem = stem
-        orig = first_dir / (orig_stem + '.mp4')
+        orig = first_dir / (orig_stem + '.mp4') # or _hevc.mkv if comparing two outputs
 
         print(f"[{idx}/{total}] ==> {orig_stem}")
 
