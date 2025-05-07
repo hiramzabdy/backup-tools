@@ -76,7 +76,7 @@ def encode_video(input_path, output_path, total_idx, total_count, summary_path):
 
     # Construir comando ffmpeg
     cmd = ['ffmpeg', '-i', str(input_path),
-           '-c:v', 'libx265', '-crf', '22', '-preset', 'medium'] # medium, slow, slower, veryslow
+           '-c:v', 'libx265', '-crf', '20', '-preset', 'slow'] # default: crf 20 preset slow
     if output_fps:
         cmd += ['-r', str(output_fps)]
     cmd += ['-c:a', 'copy', '-map_metadata', '0',
@@ -155,7 +155,7 @@ def main():
 
     for idx, vid in enumerate(videos, start=1):
         name = vid.stem + '_hevc'
-        out_file = output_dir / (name + '.mkv') # or vid.suffix
+        out_file = output_dir / (name + '.mp4') # or vid.suffix
         print(f"[{idx}/{total}] Procesando: {vid.name}")
         if out_file.exists():
             print(f"{YELLOW}[Saltando]{RESET}")
