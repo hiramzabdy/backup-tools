@@ -67,7 +67,7 @@ def log_status(summary_path, video_name, status, error_lines=None):
                     f.write(f"//{line}\n")
 
 
-def encode_video(input_path, output_path, total_idx, total_count, summary_path):
+def encode_video(input_path, output_path, codec, summary_path):
     duration = get_duration(input_path)
     total_mmss = seconds_to_mmss(duration)
     input_fps = get_frame_rate(input_path)
@@ -75,10 +75,18 @@ def encode_video(input_path, output_path, total_idx, total_count, summary_path):
     output_fps = 240 if input_fps > 239 else None
 
     # Construir comando ffmpeg
-    cmd = ['ffmpeg', '-i', str(input_path),
-           '-c:v', 'libx265', '-crf', '20', '-preset', 'slow'] # default: crf 20 preset slow
+    cmd = ['ffmpeg', '-i', str(input_path)]
+           
+    # Select codec, HEVC or AV1
+    if codec == "hevc":
+        cmd += ['-c:v', 'libx265', '-crf', '22', '-preset', 'medium'] # default: crf 20 preset slow
+    elif codec == "av1": 
+        cmd += ['-c:v', 'libsvtav1', '-crf', '28', '-preset', '8'] # default: crf 28 preset 6
+
+    # Caps FPS at 240
     if output_fps:
         cmd += ['-r', str(output_fps)]
+
     cmd += ['-c:a', 'copy', '-map_metadata', '0',
             '-y', '-progress', 'pipe:1', str(output_path)]
 
@@ -120,7 +128,7 @@ def encode_video(input_path, output_path, total_idx, total_count, summary_path):
         print(f"\r[100%] {total_mmss}/{total_mmss} - Vel: {fps} FPS")
         if proc.returncode == 0:
             print(f"{GREEN}[OK]{RESET}")
-            log_status(summary_path, input_path.name, 'OK')
+            #log_status(summary_path, input_path.name, 'OK')
         else:
             raise subprocess.CalledProcessError(proc.returncode, cmd)
 
@@ -132,18 +140,19 @@ def encode_video(input_path, output_path, total_idx, total_count, summary_path):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Codifica videos a HEVC usando libx265')
+    parser = argparse.ArgumentParser(description='Codifica videos usando libx265 o libsvt-av1')
     parser.add_argument('input_dir', help='Directorio con videos a procesar')
+    parser.add_argument('codec', help='Codec a utilizar (hevc, av1)')
     args = parser.parse_args()
 
     base_dir = Path(args.input_dir)
     if not base_dir.is_dir():
         print("El directorio especificado no existe.")
         sys.exit(1)
-
-    summary_log = base_dir / 'summary.log'
-
-    output_dir = base_dir / 'output'
+        
+    codec = args.codec if args.codec else "hevc"
+    summary_log = base_dir / (codec + "_summary.log")
+    output_dir = base_dir / (codec + '_output')
     output_dir.mkdir(exist_ok=True)
 
     videos = [f for f in base_dir.iterdir() if f.suffix.lower() in VIDEO_EXTS and f.is_file()]
@@ -154,13 +163,15 @@ def main():
         return
 
     for idx, vid in enumerate(videos, start=1):
-        name = vid.stem + '_hevc'
-        out_file = output_dir / (name + '.mp4') # or vid.suffix
         print(f"[{idx}/{total}] Procesando: {vid.name}")
+
+        name = vid.stem + "_" + codec
+        out_file = output_dir / (name + '.mkv' if codec=="av1" else name + ".mp4") # or vid.suffix
+
         if out_file.exists():
             print(f"{YELLOW}[Saltando]{RESET}")
             continue
-        encode_video(vid, out_file, idx, total, summary_log)
+        encode_video(vid, out_file, codec, summary_log)
 
 if __name__ == '__main__':
     main()
