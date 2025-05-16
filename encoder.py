@@ -79,9 +79,9 @@ def encode_video(input_path, output_path, codec, summary_path):
            
     # Select codec, HEVC or AV1
     if codec == "hevc":
-        cmd += ['-c:v', 'libx265', '-crf', '22', '-preset', 'medium'] # default: crf 20 preset slow
+        cmd += ['-c:v', 'libx265', '-crf', '20', '-preset', 'slow'] # default: crf 20 preset slow
     elif codec == "av1": 
-        cmd += ['-c:v', 'libsvtav1', '-crf', '28', '-preset', '8'] # default: crf 28 preset 6
+        cmd += ['-c:v', 'libsvtav1', '-crf', '24', '-preset', '4'] # default: crf 24 preset 4
 
     # Caps FPS at 240
     if output_fps:

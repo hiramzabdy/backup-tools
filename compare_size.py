@@ -38,16 +38,21 @@ def main():
         print("No se encontraron videos para comparar")
         return
 
+    all_original_size = 0
+    all_coded_size = 0
+
     for idx, vid in enumerate(second_dir_vids, start=1):
         # Derivar archivo original
         stem = vid.stem
+
         if stem.endswith('_hevc'):
             orig_stem = stem[:-5]
-        else:
-            orig_stem = stem
-        orig = first_dir / (orig_stem + '.mp4') # or _hevc.mkv if comparing two outputs
+        elif stem.endswith('_av1'):
+            orig_stem = stem[:-4]
 
-        print(f"[{idx}/{total}] ==> {orig_stem}")
+        orig = first_dir / (orig_stem + ".mp4")
+
+        #print(f"[{idx}/{total}] - {orig_stem}")
 
         size_orig = orig.stat().st_size if orig.exists() else None
         size_sec = vid.stat().st_size
@@ -65,8 +70,13 @@ def main():
 
         # Formatear salida
         print(
-            f"  {mb_orig:.1f} MB -> {mb_sec:.1f} MB, Δ {format_signed(diff_mb, ' MB')} ({format_signed(pct, '%')}), {status}"
+            f"[{idx}/{total}] - {orig_stem} - {mb_orig:.1f} MB => {mb_sec:.1f} MB, Δ {format_signed(diff_mb, ' MB')} ({format_signed(pct, '%')}), {status}"
         )
+        all_original_size += mb_orig
+        all_coded_size += mb_sec
+        diff_percentage = (all_coded_size/all_original_size-1)*100
+
+    print(f"\nTamaño Original: {all_original_size:.1f} MB\nTamaño Codificados: {all_coded_size:.1f} MB\nDiferencia: {(all_original_size-all_coded_size):.1f} MB ({diff_percentage:.1f}%)")
 
 if __name__ == '__main__':
     main()

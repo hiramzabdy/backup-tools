@@ -45,7 +45,7 @@ def validate_decode(output_path):
     cmd = [
         'ffmpeg',
         '-v', 'error',
-        '-c:v', 'hevc',
+        '-c:v', 'av1',
         '-i', str(output_path),
         '-f', 'null',
         '-'
@@ -70,7 +70,7 @@ def main():
     )
     parser.add_argument(
         '--margin', type=float, default=0.1,
-        help='Margen de diferencia de duración en segundos (default: 1s)'
+        help='Margen de diferencia de duración en segundos (default: 0.1s)'
     )
     args = parser.parse_args()
 
@@ -93,14 +93,14 @@ def main():
 
         # Comprobación de tiempo
         if args.mode in ['time', 'both']:
-            orig_stem = vid.stem[:-5] if vid.stem.endswith('_hevc') else vid.stem
-            orig = base_dir / (orig_stem + '.mp4')
+            orig_stem = vid.stem[:-5] if vid.stem.endswith('_hevc') else vid.stem[:-4]
+            orig = base_dir / (orig_stem + ".mp4")
 
             dur_vid = get_duration(vid)
             dur_orig = get_duration(orig)
 
             if dur_vid is None:
-                print(f"  {YELLOW}[WARN]{RESET} No se pudo leer duración de HEVC.")
+                print(f"  {YELLOW}[WARN]{RESET} No se pudo leer duración del archivo resultante.")
             elif dur_orig is None:
                 print(f"  {YELLOW}[WARN]{RESET} Original no encontrado para comparar duración.")
             else:
