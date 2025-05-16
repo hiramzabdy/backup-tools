@@ -60,9 +60,22 @@ def get_ssim(orig: Path, comp: Path) -> float:
         '-lavfi', '[0:v][1:v]ssim',
         '-f', 'null', '-'  # discard output
     ]
+
     res = subprocess.run(cmd, stderr=subprocess.PIPE, stdout=subprocess.DEVNULL, text=True)
     # parse stderr for 'All:0.xxx' at last SSIM line
     m = re.search(r'All:(0\.?\d*)', res.stderr)
+    return float(m.group(1)) if m else 0.0
+
+def get_vmaf(orig: Path, comp: Path) -> float:
+    """Run ffmpeg libvmaf filter and return overall VMAF score."""
+    cmd = [
+        'ffmpeg', '-i', str(orig), '-i', str(comp),
+        '-lavfi', '[0:v][1:v]libvmaf',
+        '-f', 'null', '-'
+    ]
+    res = subprocess.run(cmd, stderr=subprocess.PIPE, stdout=subprocess.DEVNULL, text=True)
+    # Busca algo como "VMAF score: 95.432100"
+    m = re.search(r'(?i)VMAF score: *([\d\.]+)', res.stderr)
     return float(m.group(1)) if m else 0.0
 
 def log_result(logfile, result):
@@ -71,9 +84,10 @@ def log_result(logfile, result):
             f.write(f"{result}\n")
 
 def main():
-    parser = argparse.ArgumentParser(description='Comparar bitrate, PSNR y SSIM entre dos directorios de video')
+    parser = argparse.ArgumentParser(description='Comparar bitrate, PSNR, SSIM, VMAF entre dos directorios de video')
     parser.add_argument('dir1', help='Directorio original')
     parser.add_argument('dir2', help='Directorio codificado')
+    parser.add_argument("type", help="Tipo de prueba a aplicar (PSNR, SSIM, VMAF)")
     args = parser.parse_args()
 
     date_time = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -83,6 +97,7 @@ def main():
 
     d1 = Path(args.dir1)
     d2 = Path(args.dir2)
+    test_type = args.type
     if not d1.is_dir() or not d2.is_dir():
         print('Ambos argumentos deben ser directorios válidos.')
         sys.exit(1)
@@ -100,9 +115,17 @@ def main():
         comp = sorted(matches)[0]
         br1 = get_bitrate_mbps(orig)
         br2 = get_bitrate_mbps(comp)
-        psnr = get_psnr(orig, comp)
-        ssim = get_ssim(orig, comp)
-        result = (f"{orig.name}: {br1:.2f} Mbps => {br2:.2f} Mbps, PSNR={psnr:.2f} dB, SSIM={ssim:.4f}")
+
+        if test_type == "psnr":
+            psnr = get_psnr(orig, comp)
+            result = (f"{orig.name}: {br1:.2f} Mbps => {br2:.2f} Mbps, PSNR={psnr:.2f} dB")
+        elif test_type == "ssim":
+            ssim = get_ssim(orig, comp)
+            result = (f"{orig.name}: {br1:.2f} Mbps => {br2:.2f} Mbps, SSIM={ssim:.4f}")
+        else:
+            vmaf = get_vmaf(orig, comp)
+            result = (f"{orig.name}: {br1:.2f} Mbps => {br2:.2f} Mbps, VMAF={vmaf:.4f}")
+
         log_result(f"./{logfile_name}.log", result)
         print(result)
 
