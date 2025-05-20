@@ -101,6 +101,7 @@ def encode_video(input_path, output_path, codec, summary_path):
 
     last_line_length = 0
     fps = 0
+    bitrate = "0kbits/s"
     try:
         while True:
             line = proc.stdout.readline()
@@ -116,6 +117,11 @@ def encode_video(input_path, output_path, codec, summary_path):
                     fps = int(float(val))
                 except:
                     fps = 0
+            elif key == 'bitrate':
+                try:
+                    bitrate = val
+                except:
+                    bitrate = 0
             elif key == 'out_time_ms':
                 try:
                     current_time_ms = int(val)
@@ -126,13 +132,15 @@ def encode_video(input_path, output_path, codec, summary_path):
                 pct = min(pct, 100)
                 mmss = seconds_to_mmss(completed_sec)
                 msg = f"[{pct:.0f}%] {mmss}/{total_mmss} - Vel: {fps} FPS"
+                msg = f"[{pct:.0f}%] {mmss}/{total_mmss} - Vel: {fps} FPS - BR: {bitrate}"
                 print('\r' + msg + ' ' * max(0, last_line_length - len(msg)), end='', flush=True)
                 last_line_length = len(msg)
             elif key == 'progress' and val == 'end':
                 break
 
         proc.wait()
-        print(f"\r[100%] {total_mmss}/{total_mmss} - Vel: {fps} FPS")
+        print(f"\r[100%] {total_mmss}/{total_mmss} - Vel: {fps} FPS - BR: {bitrate}")
+
         if proc.returncode == 0:
             print(f"{GREEN}[OK]{RESET}")
             #log_status(summary_path, input_path.name, 'OK')
