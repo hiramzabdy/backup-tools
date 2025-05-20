@@ -71,17 +71,24 @@ def encode_video(input_path, output_path, codec, summary_path):
     duration = get_duration(input_path)
     total_mmss = seconds_to_mmss(duration)
     input_fps = get_frame_rate(input_path)
-    # limitar fps a 240 si supera
-    output_fps = 240 if input_fps > 239 else None
 
-    # Construir comando ffmpeg
+    if 28.5 < input_fps < 31.0:
+        output_fps = 30
+    elif 59 < input_fps < 61:
+        output_fps = 60
+    elif input_fps > 239:
+        output_fps = 240
+    else:
+        output_fps = None
+
+    # Builds ffmpeg command
     cmd = ['ffmpeg', '-i', str(input_path)]
            
     # Select codec, HEVC or AV1
     if codec == "hevc":
-        cmd += ['-c:v', 'libx265', '-crf', '20', '-preset', 'slow'] # default: crf 20 preset slow
+        cmd += ['-c:v', 'libx265', '-crf', '20', '-preset', 'slow'] # Default: 20, slow
     elif codec == "av1": 
-        cmd += ['-c:v', 'libsvtav1', '-crf', '24', '-preset', '4'] # default: crf 24 preset 4
+        cmd += ['-c:v', 'libsvtav1', '-crf', '24', '-preset', '5'] # Default: 24, 4
 
     # Caps FPS at 240
     if output_fps:
