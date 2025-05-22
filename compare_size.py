@@ -16,6 +16,17 @@ def format_signed(value, unit=''):
     sign = '+' if value >= 0 else '-'
     return f"{sign}{abs(value):.1f}{unit}"
 
+def delete_vids(vids):
+    for file_path in vids:
+        path = Path(file_path)
+        try:
+            path.unlink()
+            print(f"Deleted: {file_path}")
+        except FileNotFoundError:
+            print(f"Not found: {file_path}")
+        except Exception as e:
+            print(f"Error deleting {file_path}: {e}")
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -23,10 +34,26 @@ def main():
     )
     parser.add_argument('first_dir', help='Directorio tomado como base')
     parser.add_argument('second_dir', help='Directorio a comparar con directorio base')
+    parser.add_argument(
+        "delete",
+        nargs="?",
+        default="no",
+        help="Borrar archivos más grandes que el archivo original. [yes, no] (Default: no)"
+    )
+    parser.add_argument(
+        "margin_pct",
+        nargs="?",
+        type=int,
+        default=0,
+        help="Porcentaje de margen para borrar (Default: 0)"
+    )
+
     args = parser.parse_args()
 
     first_dir = Path(args.first_dir)
     second_dir = Path(args.second_dir)
+    delete = True if args.delete == "yes" else False
+    margin_pct = int(args.margin_pct)
 
     if not first_dir.is_dir() or not second_dir.is_dir():
         print(f"Alguna carpeta no existe o no es un directorio.")
@@ -40,6 +67,7 @@ def main():
 
     all_original_size = 0
     all_coded_size = 0
+    vids_To_Delete = []
 
     for idx, vid in enumerate(second_dir_vids, start=1):
         # Derivar archivo original
@@ -51,8 +79,6 @@ def main():
             orig_stem = stem[:-4]
 
         orig = first_dir / (orig_stem + ".mp4")
-
-        #print(f"[{idx}/{total}] - {orig_stem}")
 
         size_orig = orig.stat().st_size if orig.exists() else None
         size_sec = vid.stat().st_size
@@ -67,6 +93,7 @@ def main():
         pct = (diff_mb / mb_orig * 100) if mb_orig > 0 else 0
 
         status = f"{GREEN}[OK]{RESET}" if diff_mb < 0 else f"{YELLOW}[WARN]{RESET}"
+        bigger_Than_Margin = pct >= margin_pct
 
         # Formatear salida
         print(
@@ -76,7 +103,13 @@ def main():
         all_coded_size += mb_sec
         diff_percentage = (all_coded_size/all_original_size-1)*100
 
-    print(f"\nTamaño Original: {all_original_size:.1f} MB\nTamaño Codificados: {all_coded_size:.1f} MB\nDiferencia: {(all_original_size-all_coded_size):.1f} MB ({diff_percentage:.1f}%)")
+        if bigger_Than_Margin:
+            vids_To_Delete.append(vid)
+
+    print(f"\nTamaño Original: {all_original_size:.1f} MB\nTamaño Codificados: {all_coded_size:.1f} MB\nDiferencia: {(all_original_size-all_coded_size):.1f} MB ({diff_percentage:.1f}%)\n")
+
+    if delete:
+        delete_vids(vids_To_Delete)
 
 if __name__ == '__main__':
     main()

@@ -45,7 +45,7 @@ def validate_decode(output_path):
     cmd = [
         'ffmpeg',
         '-v', 'error',
-        '-c:v', 'av1',
+        '-c:v', 'hevc',
         '-i', str(output_path),
         '-f', 'null',
         '-'
@@ -69,8 +69,8 @@ def main():
         help='Tipo de comprobación: time, code o both'
     )
     parser.add_argument(
-        '--margin', type=float, default=0.1,
-        help='Margen de diferencia de duración en segundos (default: 0.1s)'
+        '--margin', type=float, default=0.05,
+        help='Margen de diferencia de duración en segundos (default: 0.05s)'
     )
     args = parser.parse_args()
 

@@ -106,7 +106,7 @@ def main():
     for orig in sorted(d1.iterdir()):
         if not orig.is_file():
             continue
-        stem = orig.stem
+        stem = orig.stem[:-5]
         # find matching in dir2 (startswith stem)
         matches = [f for f in d2.iterdir() if f.is_file() and f.stem.startswith(stem)]
         if not matches:
