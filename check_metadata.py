@@ -1,7 +1,10 @@
 import sys
+import os
+import tempfile
 import subprocess
 import argparse
 from pathlib import Path
+from datetime import datetime, timedelta, timezone
 
 # ANSI color codes
 GREEN = '\033[92m'
@@ -29,10 +32,10 @@ def get_image_datetime(path: Path):
     out = proc.stdout.strip()
     return out or None
 
-
 def get_video_creation(path: Path):
     """
-    Extrae creation_time de video con ffprobe en formato YYYYMMDD_HHMMSS
+    Extracts creation_time from a video using ffprobe and converts it from UTC to CDMX time (UTC-6).
+    Returns the result in the format YYYYMMDD_HHMMSS.
     """
     cmd = [
         'ffprobe', '-v', 'error',
@@ -45,28 +48,131 @@ def get_video_creation(path: Path):
     ts = proc.stdout.strip()
     if not ts:
         return None
-    # ffprobe retorna algo como 2024-10-18T21:52:16.000000Z
+
     try:
-        date, time = ts.split('T')
-        time = time.split('.')[0]
-        return date.replace('-', '') + '_' + time.replace(':', '')
+        # Example ffprobe timestamp: 2024-10-18T21:52:16.000000Z
+        dt_utc = datetime.strptime(ts, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc)
+        dt_cdmx = dt_utc.astimezone(timezone(timedelta(hours=-6)))
+        return dt_cdmx.strftime("%Y%m%d_%H%M%S")
     except ValueError:
         return None
 
+def get_video_duration_seconds(path: Path) -> int:
+    """
+    Returns the duration of a video file in whole seconds using ffprobe.
+    """
+    cmd = [
+        'ffprobe', '-v', 'error',
+        '-show_entries', 'format=duration',
+        '-of', 'default=noprint_wrappers=1:nokey=1',
+        str(path)
+    ]
+    proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+    output = proc.stdout.strip()
+    try:
+        duration = float(output)
+        return int(round(duration))
+    except (ValueError, TypeError):
+        return 0  # Return 0 if duration can't be parsed
+
+def is_within_margin(filename_ts: str, metadata_ts: str, max_seconds: int = None, max_hours: int = None) -> bool:
+    """
+    Comprueba si la diferencia entre filename_ts y metadata_ts
+    está dentro de los márgenes dados (segundos y/o horas).
+    
+    Params:
+      - filename_ts: 'yyyymmdd_HHMMSS' (e.g. '20210525_153020')
+      - metadata_ts: idem
+      - max_seconds: si se especifica, margen máximo en segundos
+      - max_hours: si se especifica, margen máximo en horas
+      
+    Devuelve True si la diferencia está dentro de ambos márgenes (los que hayas pasado).
+    """
+    # 1) Convertir strings a datetime
+    fmt = "%Y%m%d_%H%M%S"
+    dt_file = datetime.strptime(filename_ts, fmt)
+    dt_meta = datetime.strptime(metadata_ts, fmt)
+    
+    # 2) Calcular diferencia absoluta
+    delta = abs(dt_file - dt_meta)
+    
+    # 3) Construir timedelta con tus márgenes
+    if max_seconds is not None:
+        if delta > timedelta(seconds=max_seconds):
+            return False
+    if max_hours is not None:
+        if delta > timedelta(hours=max_hours):
+            return False
+    
+    return True
+
+def set_video_creation_time(path: Path, local_ts: str) -> bool:
+    """
+    Overwrites the 'creation_time' metadata of a video file so that
+    it matches `local_ts` interpreted as CDMX time (UTC-6).
+
+    Args:
+        path: Path to the input video (will be replaced in-place).
+        local_ts: Timestamp in 'YYYYMMDD_HHMMSS' format, in CDMX time.
+
+    Returns:
+        True on success, False on failure.
+    """
+    # 1) Parse the incoming local timestamp
+    try:
+        dt_local = datetime.strptime(local_ts, "%Y%m%d_%H%M%S")
+    except ValueError:
+        raise ValueError(f"Timestamp {local_ts!r} not in YYYYMMDD_HHMMSS")
+    
+    # 2) Convert from CDMX (UTC-6) to UTC
+    tz_cdmx = timezone(timedelta(hours=-6))
+    dt_utc  = dt_local.replace(tzinfo=tz_cdmx).astimezone(timezone.utc)
+    utc_str = dt_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+    
+    # 3) Build a temp filename in the same folder
+    tmp_name = f".{path.stem}.tmp{path.suffix}"
+    tmp_path = path.parent / tmp_name
+    
+    # 4) Remux with FFmpeg, injecting new creation_time
+    cmd = [
+        "ffmpeg", "-y", "-loglevel", "error",
+        "-i", str(path),
+        "-c", "copy",
+        "-map_metadata", "0",
+        "-metadata", f"creation_time={utc_str}",
+        str(tmp_path)
+    ]
+    res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if res.returncode != 0 or not tmp_path.exists():
+        if tmp_path.exists():
+            tmp_path.unlink()
+        return False
+    
+    # 5) Atomically replace original
+    os.replace(str(tmp_path), str(path))
+    return True
 
 def main():
     parser = argparse.ArgumentParser(
         description='Comprueba que el metadata de fecha/hora coincida con el nombre de archivo yyyymmdd_HHMMSS.ext'
     )
     parser.add_argument('dir', help='Directorio con archivos estandarizados')
+    parser.add_argument(
+        "fix",
+        nargs="?",
+        default="no",
+        help="Borrar archivos más grandes que el archivo original. [yes, no] (Default: no)"
+    )
     args = parser.parse_args()
+
+    fix = True if args.fix == "fix" else False
 
     base = Path(args.dir)
     if not base.is_dir():
         print(f"El directorio {base} no existe o no es válido.")
         sys.exit(1)
 
-    files = sorted([f for f in base.iterdir() if f.suffix.lower() in IMAGE_EXTS + VIDEO_EXTS])
+    files = sorted([f for f in base.iterdir() if f.suffix.lower() in VIDEO_EXTS]) #IMAGE_EXTS + VIDEO_EXTS
     total = len(files)
     if total == 0:
         print("No se encontraron archivos para validar metadatos.")
@@ -81,15 +187,26 @@ def main():
             meta = get_image_datetime(path)
         else:
             meta = get_video_creation(path)
+            vid_duration = get_video_duration_seconds(path)
+            vid_duration+=vid_duration
 
         if not meta:
             print(f"  {YELLOW}[WARN]{RESET} No se encontró metadata de fecha/hora.")
+            if fix:
+                print(f"Fixing... {path}, {stem}")
+                set_video_creation_time(path, stem)
             continue
 
-        if meta == stem:
-            print(f"  {GREEN}[OK]{RESET} Metadata coincide: {meta}")
+        is_Ok = is_within_margin(stem, meta, max_seconds=vid_duration)
+
+        if is_Ok:
+            pass
+            #print(f"  {GREEN}[OK]{RESET} Metadata within margin: {meta}")
         else:
             print(f"  {RED}[ERROR]{RESET} Metadata difiere. Nombre: {stem}, Metadata: {meta}")
+            if fix:
+                print(f"Fixing... {path}, {stem}")
+                set_video_creation_time(path, stem)
 
 if __name__ == '__main__':
     main()

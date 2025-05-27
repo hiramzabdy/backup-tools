@@ -72,11 +72,12 @@ def encode_video(input_path, output_path, codec, summary_path):
     total_mmss = seconds_to_mmss(duration)
     input_fps = get_frame_rate(input_path)
 
-    if 28 < input_fps < 32:
-        output_fps = 30
-    elif 58 < input_fps < 62:
-        output_fps = 60
-    elif input_fps > 239:
+    #if 28 < input_fps < 32:
+    #    output_fps = 30
+    #elif 58 < input_fps < 62:
+    #    output_fps = 60
+    
+    if input_fps > 239:
         output_fps = 240
     else:
         output_fps = None
@@ -86,9 +87,9 @@ def encode_video(input_path, output_path, codec, summary_path):
            
     # Select codec, HEVC or AV1
     if codec == "hevc":
-        cmd += ['-c:v', 'libx265', '-crf', '22', '-preset', 'slow'] # Default: 20, slow
+        cmd += ['-c:v', 'libx265', '-crf', '28', '-preset', 'slow'] # Default: 20, slow
     elif codec == "av1": 
-        cmd += ['-c:v', 'libsvtav1', '-crf', '36', '-preset', '5'] # Default: 24, 4
+        cmd += ['-c:v', 'libsvtav1', '-crf', '48', '-preset', '5'] # Default: 24, 4
 
     # Caps FPS at 240
     if output_fps:
