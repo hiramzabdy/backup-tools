@@ -11,7 +11,6 @@ RESET = '\033[0m'
 def bytes_to_mb(b):
     return b / (1024 * 1024)
 
-
 def format_signed(value, unit=''):
     sign = '+' if value >= 0 else '-'
     return f"{sign}{abs(value):.1f}{unit}"
@@ -26,7 +25,6 @@ def delete_vids(vids):
             print(f"Not found: {file_path}")
         except Exception as e:
             print(f"Error deleting {file_path}: {e}")
-
 
 def main():
     parser = argparse.ArgumentParser(
@@ -45,13 +43,13 @@ def main():
         "delete",
         nargs="?",
         default="no",
-        help="Borrar archivos más grandes que el archivo original. [yes, no] (Default: no)"
+        help="Borrar archivos más grandes que el archivo original. [del, no] (Default: no)"
     )
 
     args = parser.parse_args()
     first_dir = Path(args.first_dir)
     second_dir = Path(args.second_dir)
-    delete = True if args.delete == "yes" else False
+    delete = True if args.delete == "del" else False
     margin_pct = int(args.margin_pct)
 
     if not first_dir.is_dir() or not second_dir.is_dir():

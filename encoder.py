@@ -87,13 +87,15 @@ def encode_video(input_path, output_path, codec, summary_path):
            
     # Select codec, HEVC or AV1
     if codec == "hevc":
-        cmd += ['-c:v', 'libx265', '-crf', '28', '-preset', 'slow'] # Default: 20, slow
+        cmd += ['-c:v', 'libx265', '-crf', '20', '-preset', 'slow'] # Default: 20, slow
     elif codec == "av1": 
-        cmd += ['-c:v', 'libsvtav1', '-crf', '48', '-preset', '5'] # Default: 24, 4
+        cmd += ['-c:v', 'libsvtav1', '-crf', '36', '-preset', '4'] # Default: 36, 4
 
     # Caps FPS at 240
     if output_fps:
         cmd += ['-r', str(output_fps)]
+
+    cmd += ['-pix_fmt', 'yuv420p']  # Widely compatible, especially for web/streaming
 
     cmd += ['-c:a', 'copy', '-map_metadata', '0',
             '-y', '-progress', 'pipe:1', str(output_path)]

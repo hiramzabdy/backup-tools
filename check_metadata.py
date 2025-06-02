@@ -13,7 +13,7 @@ RED = '\033[91m'
 RESET = '\033[0m'
 
 # Extensiones a procesar
-IMAGE_EXTS = ['.jpg', '.jpeg', '.png']
+IMAGE_EXTS = ['.jpg', '.jpeg', '.png', ".heic"]
 VIDEO_EXTS = ['.mp4', '.mov', '.mkv', '.avi']
 
 
@@ -150,7 +150,82 @@ def set_video_creation_time(path: Path, local_ts: str) -> bool:
     
     # 5) Atomically replace original
     os.replace(str(tmp_path), str(path))
+    set_file_modified_time(path, local_ts)
     return True
+
+def set_image_all_dates(path: Path, local_ts: str, adjust_file_mtime: bool = False, overwrite: bool = False) -> bool:
+    """
+    Sets all the important EXIF date tags of an image (CreateDate, DateTimeOriginal, ModifyDate)
+    to `local_ts` (CDMX local time).
+    Optionally also updates the file's modification time to match.
+
+    Args:
+        path: Path to the image file.
+        local_ts: Timestamp in 'YYYYMMDD_HHMMSS' format (CDMX local time).
+        adjust_file_mtime: If True, also sets the filesystem mtime to the same timestamp.
+
+    Returns:
+        True if ExifTool (and utime, if requested) succeed, False otherwise.
+    """
+    # 1) Parse incoming timestamp
+    try:
+        dt = datetime.strptime(local_ts, "%Y%m%d_%H%M%S")
+    except ValueError:
+        raise ValueError(f"Timestamp {local_ts!r} not in YYYYMMDD_HHMMSS format")
+
+    # 2) Reformat to EXIF’s "YYYY:MM:DD HH:MM:SS"
+    exif_ts = dt.strftime("%Y:%m:%d %H:%M:%S")
+
+    # 3) Build ExifTool command
+    cmd = [
+        "exiftool",
+        "-overwrite_original",
+        f"-AllDates={exif_ts}",
+    ]
+    if adjust_file_mtime:
+        # Also set the file’s modify timestamp
+        cmd.append(f"-FileModifyDate={exif_ts}")
+    cmd.append(str(path))
+
+    # 4) Run ExifTool
+    res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if overwrite:
+        original = path
+        new_path = original.with_name(f"{local_ts}{original.suffix}")
+        original.rename(new_path)
+    return res.returncode == 0
+
+def set_file_modified_time(path: Path, local_ts: str) -> bool:
+    """
+    Sets the file's mtime (and atime) to `local_ts`, interpreted as CDMX time (UTC-6).
+
+    Args:
+        path: Path to the file.
+        local_ts: Timestamp in 'YYYYMMDD_HHMMSS' format (CDMX time).
+
+    Returns:
+        True if successful, False otherwise.
+    """
+    # 1) Parse the incoming local timestamp
+    try:
+        dt_local = datetime.strptime(local_ts, "%Y%m%d_%H%M%S")
+    except ValueError:
+        raise ValueError(f"Timestamp {local_ts!r} not in YYYYMMDD_HHMMSS format")
+
+    # 2) Attach CDMX timezone (UTC-6) and convert to UTC
+    tz_cdmx = timezone(timedelta(hours=-6))
+    dt_aware = dt_local.replace(tzinfo=tz_cdmx)
+    
+    # 3) Get POSIX timestamp (seconds since epoch)
+    #    .timestamp() on an aware datetime gives the correct UTC-based epoch
+    ts = dt_aware.timestamp()
+
+    # 4) Apply to both atime and mtime
+    try:
+        os.utime(path, (ts, ts))
+        return True
+    except Exception:
+        return False
 
 def main():
     parser = argparse.ArgumentParser(
@@ -172,7 +247,7 @@ def main():
         print(f"El directorio {base} no existe o no es válido.")
         sys.exit(1)
 
-    files = sorted([f for f in base.iterdir() if f.suffix.lower() in VIDEO_EXTS]) #IMAGE_EXTS + VIDEO_EXTS
+    files = sorted([f for f in base.iterdir() if f.suffix.lower() in IMAGE_EXTS]) #IMAGE_EXTS + VIDEO_EXTS
     total = len(files)
     if total == 0:
         print("No se encontraron archivos para validar metadatos.")
@@ -185,19 +260,21 @@ def main():
         # Seleccionar modo según extensión
         if path.suffix.lower() in IMAGE_EXTS:
             meta = get_image_datetime(path)
+            margin_secs = 60
         else:
             meta = get_video_creation(path)
-            vid_duration = get_video_duration_seconds(path)
-            vid_duration+=vid_duration
+            margin_secs = get_video_duration_seconds(path)
+            margin_secs += margin_secs
 
         if not meta:
             print(f"  {YELLOW}[WARN]{RESET} No se encontró metadata de fecha/hora.")
             if fix:
                 print(f"Fixing... {path}, {stem}")
-                set_video_creation_time(path, stem)
+                #set_video_creation_time(path, stem)
+                #set_image_all_dates(path, stem, True, True)
             continue
 
-        is_Ok = is_within_margin(stem, meta, max_seconds=vid_duration)
+        is_Ok = is_within_margin(stem, meta, max_seconds=margin_secs)
 
         if is_Ok:
             pass
@@ -206,7 +283,9 @@ def main():
             print(f"  {RED}[ERROR]{RESET} Metadata difiere. Nombre: {stem}, Metadata: {meta}")
             if fix:
                 print(f"Fixing... {path}, {stem}")
-                set_video_creation_time(path, stem)
+                #set_video_creation_time(path, stem)
+                #set_image_all_dates(path, stem, True)
+
 
 if __name__ == '__main__':
     main()

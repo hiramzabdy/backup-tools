@@ -69,8 +69,8 @@ def main():
         help='Tipo de comprobación: time, code o both'
     )
     parser.add_argument(
-        '--margin', type=float, default=0.05,
-        help='Margen de diferencia de duración en segundos (default: 0.05s)'
+        '--margin', type=float, default=0.5,
+        help='Margen de diferencia de duración en segundos (default: 0.5s)'
     )
     args = parser.parse_args()
 
