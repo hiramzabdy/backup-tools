@@ -14,7 +14,7 @@ RESET = '\033[0m'
 
 # Extensiones a procesar
 IMAGE_EXTS = ['.jpg', '.jpeg', '.png', ".heic"]
-VIDEO_EXTS = ['.mp4', '.mov', '.mkv', '.avi']
+VIDEO_EXTS = ['.mp4', '.mov', '.mkv', '.avi', ".3gp"]
 
 
 def get_image_datetime(path: Path):
@@ -241,13 +241,20 @@ def main():
     args = parser.parse_args()
 
     fix = True if args.fix == "fix" else False
+    fix_type = "VID" # VID, IMG, BOTH
+    data_to_keep = "NAME" #NAME or META
 
+    #Checks dir, gets and sorts all item in it.
     base = Path(args.dir)
     if not base.is_dir():
         print(f"El directorio {base} no existe o no es válido.")
         sys.exit(1)
-
-    files = sorted([f for f in base.iterdir() if f.suffix.lower() in IMAGE_EXTS]) #IMAGE_EXTS + VIDEO_EXTS
+    if fix_type == "IMG":
+        files = sorted([f for f in base.iterdir() if f.suffix.lower() in IMAGE_EXTS])
+    elif fix_type == "VID":
+        files = sorted([f for f in base.iterdir() if f.suffix.lower() in VIDEO_EXTS])
+    elif fix_type == "BOTH":
+        files = sorted([f for f in base.iterdir() if f.suffix.lower() in IMAGE_EXTS + VIDEO_EXTS])
     total = len(files)
     if total == 0:
         print("No se encontraron archivos para validar metadatos.")
@@ -255,9 +262,8 @@ def main():
 
     for idx, path in enumerate(files, start=1):
         print(f"[{idx}/{total}] {path.name}")
-        stem = path.stem  # formato yyyymmdd_HHMMSS
-
-        # Seleccionar modo según extensión
+        stem = path.stem  # yyyymmdd_HHMMSS format
+        # Gets metadata and adjusts margin
         if path.suffix.lower() in IMAGE_EXTS:
             meta = get_image_datetime(path)
             margin_secs = 60
@@ -270,21 +276,28 @@ def main():
             print(f"  {YELLOW}[WARN]{RESET} No se encontró metadata de fecha/hora.")
             if fix:
                 print(f"Fixing... {path}, {stem}")
-                #set_video_creation_time(path, stem)
-                #set_image_all_dates(path, stem, True, True)
+                if fix_type == "IMG":
+                    set_image_all_dates(path, stem, True, True)
+                else:
+                    set_video_creation_time(path, stem)
             continue
 
         is_Ok = is_within_margin(stem, meta, max_seconds=margin_secs)
 
-        if is_Ok:
-            pass
-            #print(f"  {GREEN}[OK]{RESET} Metadata within margin: {meta}")
-        else:
+        if not is_Ok:
             print(f"  {RED}[ERROR]{RESET} Metadata difiere. Nombre: {stem}, Metadata: {meta}")
             if fix:
                 print(f"Fixing... {path}, {stem}")
-                #set_video_creation_time(path, stem)
-                #set_image_all_dates(path, stem, True)
+                if fix_type == "IMG":
+                    if data_to_keep == "NAME":
+                        set_image_all_dates(path, stem, True)
+                    else:
+                        set_image_all_dates(path, meta, True)
+                elif fix_type == "VID":
+                    if data_to_keep == "NAME":
+                        set_video_creation_time(path, stem)
+                    else:
+                        set_video_creation_time(path, meta)
 
 
 if __name__ == '__main__':
