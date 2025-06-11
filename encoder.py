@@ -10,7 +10,7 @@ RED = '\033[91m'
 YELLOW = '\033[93m'
 RESET = '\033[0m'
 
-VIDEO_EXTS = ['.mp4', '.mov', '.mkv', '.avi']
+VIDEO_EXTS = ['.mp4', '.mov', '.mkv', '.avi', ".3gp"]
 
 
 def seconds_to_mmss(seconds):
@@ -87,9 +87,9 @@ def encode_video(input_path, output_path, codec, summary_path):
            
     # Select codec, HEVC or AV1
     if codec == "hevc":
-        cmd += ['-c:v', 'libx265', '-crf', '22', '-preset', 'slow'] # Default: 20, slow
+        cmd += ['-c:v', 'libx265', '-crf', '20', '-preset', 'slow'] # Default: 20, slow
     elif codec == "av1": 
-        cmd += ['-c:v', 'libsvtav1', '-crf', '40', '-preset', '3'] # Default: 36, 4
+        cmd += ['-c:v', 'libsvtav1', '-crf', '40', '-preset', '3'] # Default: 36, 3
 
     # Caps FPS at 240
     if output_fps:

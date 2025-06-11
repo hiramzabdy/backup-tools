@@ -233,6 +233,12 @@ def main():
     )
     parser.add_argument('dir', help='Directorio con archivos estandarizados')
     parser.add_argument(
+        "media",
+        nargs="?",
+        default="img",
+        help="Work with img or vid"
+    )
+    parser.add_argument(
         "fix",
         nargs="?",
         default="no",
@@ -241,7 +247,7 @@ def main():
     args = parser.parse_args()
 
     fix = True if args.fix == "fix" else False
-    fix_type = "VID" # VID, IMG, BOTH
+    fix_type = "IMG" if args.media == "img" else "VID"
     data_to_keep = "NAME" #NAME or META
 
     #Checks dir, gets and sorts all item in it.

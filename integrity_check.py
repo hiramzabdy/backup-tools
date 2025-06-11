@@ -95,6 +95,10 @@ def main():
         if args.mode in ['time', 'both']:
             orig_stem = vid.stem[:-5] if vid.stem.endswith('_hevc') else vid.stem[:-4]
             orig = base_dir / (orig_stem + ".mp4")
+            orig3gp = base_dir / (orig_stem + ".3gp")
+
+            if not orig.exists():
+                orig = orig3gp
 
             dur_vid = get_duration(vid)
             dur_orig = get_duration(orig)

@@ -76,6 +76,15 @@ def main():
             orig_stem = stem[:-4]
 
         orig = first_dir / (orig_stem + ".mp4")
+        orig3gp = first_dir / (orig_stem + ".3gp")
+        
+        if orig.exists():
+            size_orig = orig.stat().st_size or None
+        elif orig3gp.exists():
+            size_orig = orig3gp.stat().st_size or None
+            orig = orig3gp
+        else:
+            size_orig = None
 
         size_orig = orig.stat().st_size if orig.exists() else None
         size_sec = vid.stat().st_size
