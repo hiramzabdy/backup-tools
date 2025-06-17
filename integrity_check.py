@@ -33,7 +33,6 @@ def get_duration(path):
     except:
         return None
 
-
 def validate_decode(output_path):
     """
     Prueba de decodificación usando el decoder interno de FFmpeg para AV1.
@@ -56,6 +55,16 @@ def validate_decode(output_path):
     else:
         return False, proc.stderr.splitlines()
 
+def delete_vids(vids):
+    for file_path in vids:
+        path = Path(file_path)
+        try:
+            path.unlink()
+            print(f"Deleted: {file_path}")
+        except FileNotFoundError:
+            print(f"Not found: {file_path}")
+        except Exception as e:
+            print(f"Error deleting {file_path}: {e}")
 
 def main():
     parser = argparse.ArgumentParser(
@@ -69,13 +78,17 @@ def main():
         help='Tipo de comprobación: time, code o both'
     )
     parser.add_argument(
-        '--margin', type=float, default=0.5,
-        help='Margen de diferencia de duración en segundos (default: 0.5s)'
+        "delete",
+        nargs="?",
+        default="no",
+        help="Borrar archivos más grandes que el archivo original. [del, no] (Default: no)"
     )
     args = parser.parse_args()
 
     base_dir = Path(args.base_dir)
     output_dir = Path(args.output_dir)
+    margin = 0.5
+    delete = True if args.delete == "del" else False
 
     if not output_dir.is_dir() or not base_dir.is_dir():
         print(f"Uno de los dos directorios no existe.")
@@ -83,6 +96,7 @@ def main():
 
     coded_videos = sorted([f for f in output_dir.iterdir() if f.is_file()])    
     total = len(coded_videos)
+    vids_To_Delete = []
 
     if total == 0:
         print("No se encontraron archivos en " + output_dir + ".")
@@ -105,19 +119,21 @@ def main():
 
             if dur_vid is None:
                 print(f"  {YELLOW}[WARN]{RESET} No se pudo leer duración del archivo resultante.")
+                vids_To_Delete.append(vid)
             elif dur_orig is None:
                 print(f"  {YELLOW}[WARN]{RESET} Original no encontrado para comparar duración.")
             else:
                 diff = abs(dur_vid - dur_orig)
                 mmss_orig = seconds_to_mmss(dur_orig)
                 mmss_av1 = seconds_to_mmss(dur_vid)
-                if diff <= args.margin:
+                if diff <= margin:
                     print(f"  {GREEN}[OK]{RESET} Duración OK (orig: {mmss_orig}, av1: {mmss_av1}).")
                 else:
                     print(
-                        f"  {RED}[ERROR]{RESET} Duración difiere más de {args.margin}s: "
+                        f"  {RED}[ERROR]{RESET} Duración difiere más de {margin}s: "
                         f"orig {mmss_orig}, av1 {mmss_av1}."
                     )
+                    vids_To_Delete.append(vid)
 
         # Comprobación de decodificación
         if args.mode in ['code', 'both']:
@@ -132,6 +148,9 @@ def main():
                     continue
                 if args.mode == 'both':
                     continue
+    if delete:
+        #print(f"{RED}Deleting the following videos{RESET}")
+        delete_vids(vids_To_Delete)
 
 if __name__ == '__main__':
     main()

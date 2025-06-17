@@ -2,6 +2,7 @@ import os
 import sys
 import subprocess
 import argparse
+import time
 from pathlib import Path
 
 # ANSI color codes
@@ -67,7 +68,7 @@ def log_status(summary_path, video_name, status, error_lines=None):
                     f.write(f"//{line}\n")
 
 
-def encode_video(input_path, output_path, codec, summary_path):
+def encode_video(input_path, output_path, codec, summary_path, ccd=2):
     duration = get_duration(input_path)
     total_mmss = seconds_to_mmss(duration)
     input_fps = get_frame_rate(input_path)
@@ -87,7 +88,7 @@ def encode_video(input_path, output_path, codec, summary_path):
            
     # Select codec, HEVC or AV1
     if codec == "hevc":
-        cmd += ['-c:v', 'libx265', '-crf', '20', '-preset', 'slow'] # Default: 20, slow
+        cmd += ['-c:v', 'libx265', '-crf', '20', '-preset', 'veryslow'] # Default: 20, slow
     elif codec == "av1": 
         cmd += ['-c:v', 'libsvtav1', '-crf', '40', '-preset', '3'] # Default: 36, 3
 
@@ -117,7 +118,7 @@ def encode_video(input_path, output_path, codec, summary_path):
 
             if key == 'fps':
                 try:
-                    fps = int(float(val))
+                    fps = round(float(val), 1)
                 except:
                     fps = 0
             elif key == 'bitrate':
@@ -161,6 +162,12 @@ def main():
     parser = argparse.ArgumentParser(description='Codifica videos usando libx265 o libsvt-av1')
     parser.add_argument('input_dir', help='Directorio con videos a procesar')
     parser.add_argument('codec', help='Codec a utilizar (hevc, av1)')
+    parser.add_argument(
+        "ccd",
+        nargs="?",
+        default=2,
+        help="CCD a utilizar. [0 = CC0, 1 = CCD1, 2 = No afinity]"
+    )
     args = parser.parse_args()
 
     base_dir = Path(args.input_dir)
@@ -170,7 +177,7 @@ def main():
         
     codec = args.codec if args.codec else "hevc"
     summary_log = base_dir / (codec + "_summary.log")
-    output_dir = base_dir / (codec + '_output')
+    output_dir = base_dir / (codec)
     output_dir.mkdir(exist_ok=True)
 
     videos = [f for f in base_dir.iterdir() if f.suffix.lower() in VIDEO_EXTS and f.is_file()]
@@ -189,7 +196,7 @@ def main():
         if out_file.exists():
             print(f"{YELLOW}[Saltando]{RESET}")
             continue
-        encode_video(vid, out_file, codec, summary_log)
+        encode_video(vid, out_file, codec, summary_log, args.ccd)
 
 if __name__ == '__main__':
     main()
