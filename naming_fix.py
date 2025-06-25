@@ -104,5 +104,4 @@ if __name__ == "__main__":
         sys.exit(1)
 
     carpeta = sys.argv[1]
-    #estandarizar_screenshots(carpeta)
     estandarizar_nombres(carpeta)

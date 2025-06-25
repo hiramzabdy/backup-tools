@@ -19,7 +19,6 @@ def seconds_to_mmss(seconds):
     s = int(seconds % 60)
     return f"{m:02d}:{s:02d}"
 
-
 def get_duration(path):
     cmd = [
         'ffprobe', '-v', 'error',
@@ -33,7 +32,6 @@ def get_duration(path):
         return float(result.stdout.strip())
     except:
         return 0.0
-
 
 def get_frame_rate(path):
     cmd = [
@@ -56,7 +54,6 @@ def get_frame_rate(path):
         fps_val = 0.0
     return fps_val
 
-
 def log_status(summary_path, video_name, status, error_lines=None):
     with open(summary_path, 'a', encoding='utf-8') as f:
         if status == 'OK':
@@ -67,6 +64,46 @@ def log_status(summary_path, video_name, status, error_lines=None):
                 for line in error_lines:
                     f.write(f"//{line}\n")
 
+def get_scaled_resolution(video_path: str) -> tuple[int, int]:
+    """
+    Given a video path, returns the scaled resolution (width, height).
+    If the video is already <=1080p (in both dimensions), returns the original resolution.
+    If larger, it scales it down to max 1080 in the larger dimension, preserving aspect ratio.
+    """
+    # Run ffprobe to get width and height
+    cmd = [
+        'ffprobe',
+        '-v', 'error',
+        '-show_entries', 'stream=width,height',
+        '-of', 'default=noprint_wrappers=1:nokey=1',
+        video_path
+    ]
+    result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+    if result.returncode != 0:
+        raise RuntimeError(f"ffprobe failed: {result.stderr.strip()}")
+
+    try:
+        width_str, height_str = result.stdout.strip().split('\n')
+        width, height = int(width_str), int(height_str)
+    except ValueError:
+        raise ValueError("Could not parse resolution from ffprobe output.")
+
+    print(f"[Org. res] {width}x{height}")
+    # Check if scaling is needed
+    if min(width, height) <= 1088:
+        return width, height  # No scaling needed
+
+    # Determine scale factor
+    if width <= height:
+        scale_factor = 1080 / width
+    else:
+        scale_factor = 1080 / height
+
+    new_width = int(round(width * scale_factor))
+    new_height = int(round(height * scale_factor))
+    print(f"[New res] {RED} {new_width}x{new_height} {RESET}")
+    return new_width, new_height
 
 def encode_video(input_path, output_path, codec, summary_path, ccd=2):
     duration = get_duration(input_path)
@@ -88,9 +125,14 @@ def encode_video(input_path, output_path, codec, summary_path, ccd=2):
            
     # Select codec, HEVC or AV1
     if codec == "hevc":
-        cmd += ['-c:v', 'libx265', '-crf', '20', '-preset', 'veryslow'] # Default: 20, slow
+        cmd += ['-c:v', 'libx265', '-crf', '20', '-preset', 'slow'] # Default: 20, slow
     elif codec == "av1": 
-        cmd += ['-c:v', 'libsvtav1', '-crf', '40', '-preset', '3'] # Default: 36, 3
+        cmd += ['-c:v', 'libsvtav1', '-crf', '36', '-preset', '2'] # Default: 36, 2
+
+    # Downscales it to 1080p if codec set to av1 (for storage savings)
+    if codec == "av1":
+        new_width, new_height = get_scaled_resolution(str(input_path))
+        cmd += ['-vf', f'scale={new_width}:{new_height}']
 
     # Caps FPS at 240
     if output_fps:
@@ -156,7 +198,6 @@ def encode_video(input_path, output_path, codec, summary_path, ccd=2):
             output_path.unlink()
         print(f"{RED}[ERROR]{RESET}")
         log_status(summary_path, input_path.name, 'ERROR', [str(e)])
-
 
 def main():
     parser = argparse.ArgumentParser(description='Codifica videos usando libx265 o libsvt-av1')
