@@ -89,10 +89,9 @@ def get_scaled_resolution(video_path: str) -> tuple[int, int]:
     except ValueError:
         raise ValueError("Could not parse resolution from ffprobe output.")
 
-    print(f"[Org. res] {width}x{height}")
     # Check if scaling is needed
     if min(width, height) <= 1088:
-        return width, height  # No scaling needed
+        return False  # No scaling needed
 
     # Determine scale factor
     if width <= height:
@@ -102,8 +101,9 @@ def get_scaled_resolution(video_path: str) -> tuple[int, int]:
 
     new_width = int(round(width * scale_factor))
     new_height = int(round(height * scale_factor))
+    print(f"[Org. res] {width}x{height}")
     print(f"[New res] {RED} {new_width}x{new_height} {RESET}")
-    return new_width, new_height
+    return True
 
 def encode_video(input_path, output_path, codec, summary_path, ccd=2):
     duration = get_duration(input_path)
@@ -125,14 +125,14 @@ def encode_video(input_path, output_path, codec, summary_path, ccd=2):
            
     # Select codec, HEVC or AV1
     if codec == "hevc":
-        cmd += ['-c:v', 'libx265', '-crf', '20', '-preset', 'slow'] # Default: 20, slow
+        cmd += ['-c:v', 'libx265', '-crf', '18', '-preset', 'slower'] # Default: 18, slower (or veryslow)
     elif codec == "av1": 
-        cmd += ['-c:v', 'libsvtav1', '-crf', '36', '-preset', '2'] # Default: 36, 2
+        cmd += ['-c:v', 'libsvtav1', '-crf', '36', '-preset', '1'] # Default: 36, 3
 
     # Downscales it to 1080p if codec set to av1 (for storage savings)
-    if codec == "av1":
-        new_width, new_height = get_scaled_resolution(str(input_path))
-        cmd += ['-vf', f'scale={new_width}:{new_height}']
+    toDownscale = get_scaled_resolution(str(input_path))
+    if codec == "av1" and toDownscale:
+        cmd += ["-vf", "scale='if(gt(a,1),-2,1080)':'if(gt(a,1),1080,-2)'"] #scale='if(gt(a,1),-2,1080)':'if(gt(a,1),1080,-2)'
 
     # Caps FPS at 240
     if output_fps:
@@ -197,7 +197,7 @@ def encode_video(input_path, output_path, codec, summary_path, ccd=2):
         if output_path.exists():
             output_path.unlink()
         print(f"{RED}[ERROR]{RESET}")
-        log_status(summary_path, input_path.name, 'ERROR', [str(e)])
+        #log_status(summary_path, input_path.name, 'ERROR', [str(e)])
 
 def main():
     parser = argparse.ArgumentParser(description='Codifica videos usando libx265 o libsvt-av1')

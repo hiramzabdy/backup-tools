@@ -1,6 +1,7 @@
 import sys
 import os
 import tempfile
+import re
 import subprocess
 import argparse
 from pathlib import Path
@@ -28,8 +29,11 @@ def get_image_datetime(path: Path):
         '-S', '-s',
         str(path)
     ]
-    proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
-    out = proc.stdout.strip()
+    try:
+        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+        out = proc.stdout.strip()
+    except:
+        pass
     return out or None
 
 def get_video_creation(path: Path):
@@ -227,6 +231,35 @@ def set_file_modified_time(path: Path, local_ts: str) -> bool:
     except Exception:
         return False
 
+def get_standard_name(nombre_archivo):
+  """
+  Extrae la parte estándar del nombre de un archivo (YYYYMMDD_HHMMSS).
+
+  Si el nombre es "YYYYMMDD_HHMMSS_XYZ", devuelve "YYYYMMDD_HHMMSS".
+  Si el nombre ya es "YYYYMMDD_HHMMSS", lo devuelve sin cambios.
+
+  Args:
+    nombre_archivo (str): El nombre del archivo (sin extensión).
+
+  Returns:
+    str: El nombre del archivo en formato estándar o el nombre original si no coincide.
+  """
+  # Patrón que busca 8 dígitos, un guion bajo y 6 dígitos al inicio del string.
+  # ^ -> ancla el patrón al inicio del string.
+  # \d{8} -> busca exactamente 8 dígitos (YYYYMMDD).
+  # _ -> busca el carácter de guion bajo.
+  # \d{6} -> busca exactamente 6 dígitos (HHMMSS).
+  patron = re.compile(r'^\d{8}_\d{6}')
+  
+  match = patron.match(nombre_archivo)
+  
+  if match:
+    # Si encuentra una coincidencia, devuelve la parte que coincidió.
+    return match.group(0)
+  else:
+    # Si no hay coincidencia, devuelve el nombre original.
+    return nombre_archivo
+
 def main():
     parser = argparse.ArgumentParser(
         description='Comprueba que el metadata de fecha/hora coincida con el nombre de archivo yyyymmdd_HHMMSS.ext'
@@ -249,6 +282,8 @@ def main():
     fix = True if args.fix == "fix" else False
     fix_type = "IMG" if args.media == "img" else "VID"
     data_to_keep = "NAME" #NAME or META
+    pathUniqueDates = []
+    metaUniqueDates = []
 
     #Checks dir, gets and sorts all item in it.
     base = Path(args.dir)
@@ -268,7 +303,8 @@ def main():
 
     for idx, path in enumerate(files, start=1):
         print(f"[{idx}/{total}] {path.name}")
-        stem = path.stem  # yyyymmdd_HHMMSS format
+        # yyyymmdd_HHMMSS format
+        stem = get_standard_name(path.stem)
         # Gets metadata and adjusts margin
         if path.suffix.lower() in IMAGE_EXTS:
             meta = get_image_datetime(path)
@@ -283,12 +319,16 @@ def main():
             if fix:
                 print(f"Fixing... {path}, {stem}")
                 if fix_type == "IMG":
-                    set_image_all_dates(path, stem, True, True)
+                    set_image_all_dates(path, stem, True)
                 else:
                     set_video_creation_time(path, stem)
             continue
 
-        is_Ok = is_within_margin(stem, meta, max_seconds=margin_secs)
+        try:
+            is_Ok = is_within_margin(stem, meta, max_seconds=margin_secs)
+        except:
+            is_Ok = False
+        pathUniqueDates.append(stem)
 
         if not is_Ok:
             print(f"  {RED}[ERROR]{RESET} Metadata difiere. Nombre: {stem}, Metadata: {meta}")
@@ -297,8 +337,11 @@ def main():
                 if fix_type == "IMG":
                     if data_to_keep == "NAME":
                         set_image_all_dates(path, stem, True)
+                    elif meta not in pathUniqueDates and meta not in metaUniqueDates:
+                        metaUniqueDates.append(meta)
+                        set_image_all_dates(path, meta, True, True)
                     else:
-                        set_image_all_dates(path, meta, True)
+                        print(f"Ya hay un archivo con el nombre {meta}")
                 elif fix_type == "VID":
                     if data_to_keep == "NAME":
                         set_video_creation_time(path, stem)

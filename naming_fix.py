@@ -4,99 +4,76 @@ import sys
 from pathlib import Path
 
 def estandarizar_nombres(directorio):
-    patron_fecha_hora = re.compile(r'(\d{8})[_\-]?(\d{6})')  # Ej: 20240104_162823 o 20240104-162823
+    """
+    Renombra archivos de imagen y video en un directorio a un formato de fecha y hora
+    estandarizado (YYYYMMDD_HHMMSS), manejando múltiples formatos de nombre de archivo.
+
+    Args:
+        directorio (str): La ruta al directorio que contiene los archivos.
+    """
+    # Patrón 1: Captura formatos comunes como 'YYYYMMDD_HHMMSS' o 'IMG_YYYYMMDD_HHMMSS...'.
+    # Busca 8 dígitos (fecha), un separador opcional, y 6 dígitos (hora).
+    patron_principal = re.compile(r'(\d{8})[_-]?(\d{6})')
+    
+    # Patrón 2: Para usarse sobre un nombre de archivo sin separadores.
+    # Busca una secuencia directa de 'YYYYMMDDHHMMSS'.
+    patron_secundario = re.compile(r'(\d{8})(\d{6})')
+
+    if not os.path.isdir(directorio):
+        print(f"Error: El directorio '{directorio}' no existe.")
+        return
+
+    print(f"Analizando el directorio: {directorio}\n")
 
     for archivo in os.listdir(directorio):
         ruta_original = os.path.join(directorio, archivo)
+
         if not os.path.isfile(ruta_original):
             continue
 
         nombre, extension = os.path.splitext(archivo)
         extension = extension.lower()
 
-        # Solo interesan estos formatos
+        # Filtrar solo los formatos de archivo de interés
         if extension not in ['.jpg', '.jpeg', '.png', '.mp4', '.mov', '.mkv', '.avi', '.3gp']:
             continue
 
-        m = patron_fecha_hora.search(nombre)
-        # Verificamos que el patrón llegue hasta el final del nombre original
-        if m and m.end() == len(nombre):
-            fecha = m.group(1)
-            hora = m.group(2)[:6]  # descartamos posibles milisegundos
+        fecha, hora = None, None
+        
+        # --- Inicio de la lógica de extracción mejorada ---
+
+        # Intento 1: Usar el patrón principal
+        match = patron_principal.search(nombre)
+        if match:
+            fecha = match.group(1)
+            hora = match.group(2)
+        else:
+            # Intento 2: Limpiar el nombre de separadores y usar el patrón secundario
+            nombre_limpio = re.sub(r'[-. _]', '', nombre)
+            match_sec = patron_secundario.search(nombre_limpio)
+            if match_sec:
+                fecha = match_sec.group(1)
+                hora = match_sec.group(2)
+
+        # --- Fin de la lógica de extracción ---
+
+        # Si se encontró una fecha y hora, proceder a renombrar
+        if fecha and hora:
             nuevo_nombre = f"{fecha}_{hora}{extension}"
             nueva_ruta = os.path.join(directorio, nuevo_nombre)
 
-            # Renombrar solo si no existe ya un archivo con ese nombre
-            if ruta_original != nueva_ruta and not os.path.exists(nueva_ruta):
-                print(f"Renombrando: {archivo} → {nuevo_nombre}")
-                os.rename(ruta_original, nueva_ruta)
-            else:
-                # Si existe, dejamos el archivo con su nombre original
-                print(f"Omitiendo (ya existe o sin cambios): {archivo}")
-
-def estandarizar_screenshots(directorio):
-    patrones = [
-        # Captura de pantalla_2017-01-04-03-24-19.png
-        re.compile(r'(\d{4})[-_]?(\d{2})[-_]?(\d{2})[-_]?[- ]?(\d{2})[-_]?(\d{2})[-_]?(\d{2})'),
-        # _20170802_140411.JPG, SAVE_20190729_041118.jpg, IMG_20170807_225549.jpg
-        re.compile(r'(\d{8})[_\-](\d{6})'),
-    ]
-
-    app_extra = re.compile(r'[_-]([a-zA-Z0-9\.]+)\.(jpg|jpeg|png|mp4|mov|mkv|avi)$')
-
-    for archivo in os.listdir(directorio):
-        ruta_original = os.path.join(directorio, archivo)
-        if not os.path.isfile(ruta_original):
-            continue
-
-        nombre, extension = os.path.splitext(archivo)
-        extension = extension.lower()
-
-        if extension not in ['.jpg', '.jpeg', '.png', '.mp4', '.mov', '.mkv', '.avi', '.3gp']:
-            continue
-
-        fecha = hora = app = None
-
-        for patron in patrones:
-            coincidencia = patron.search(nombre)
-            if coincidencia:
-                if len(coincidencia.groups()) == 6:
-                    # yyyy-mm-dd-hh-mm-ss separado
-                    yyyy, mm, dd, hh, mi, ss = coincidencia.groups()
-                    fecha = f"{yyyy}{mm}{dd}"
-                    hora = f"{hh}{mi}{ss}"
-                elif len(coincidencia.groups()) == 2:
-                    # yyyymmdd_hhmmss
-                    fecha = coincidencia.group(1)
-                    hora = coincidencia.group(2)[:6]
-                break
-
-        if not fecha or not hora:
-            continue  # Si no se puede extraer la fecha/hora, saltar
-
-        # Intentamos extraer el nombre de la app (opcional)
-        app_match = app_extra.search(archivo)
-        if app_match:
-            app = app_match.group(1)
-
-        nuevo_nombre = f"{fecha}_{hora}"
-        if app:
-            nuevo_nombre += f"_{app}"
-        nuevo_nombre += extension
-
-        nueva_ruta = os.path.join(directorio, nuevo_nombre)
-
-        if ruta_original != nueva_ruta:
-            contador = 1
-            while os.path.exists(nueva_ruta):
-                nueva_ruta = os.path.join(
-                    directorio,
-                    f"{fecha}_{hora}_{contador}{extension}"
-                )
-                contador += 1
-
-            print(f"Renombrando: {archivo} => {os.path.basename(nueva_ruta)}")
-            os.rename(ruta_original, nueva_ruta)
+            # Renombrar solo si el nombre es diferente
+            if ruta_original != nueva_ruta:
+                # Y si no existe ya un archivo con el nuevo nombre para evitar sobrescribir
+                if not os.path.exists(nueva_ruta):
+                    print(f"✅ Renombrando: {archivo}  =>  {nuevo_nombre}")
+                    os.rename(ruta_original, nueva_ruta)
+                else:
+                    print(f"⚠️  Omitiendo (ya existe): {archivo}  (destino: {nuevo_nombre})")
+            # else:
+            #     print(f"ℹ️  Omitiendo (nombre sin cambios): {archivo}")
+        # else:
+        #     print(f"❌ Omitiendo (patrón no encontrado): {archivo}")
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
