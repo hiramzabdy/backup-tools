@@ -127,7 +127,7 @@ def encode_video(input_path, output_path, codec, summary_path, ccd=2):
     if codec == "hevc":
         cmd += ['-c:v', 'libx265', '-crf', '18', '-preset', 'slower'] # Default: 18, slower (or veryslow)
     elif codec == "av1": 
-        cmd += ['-c:v', 'libsvtav1', '-crf', '36', '-preset', '1'] # Default: 36, 3
+        cmd += ['-c:v', 'libsvtav1', '-crf', '36', '-preset', '2'] # Default: 36, 3
 
     # Downscales it to 1080p if codec set to av1 (for storage savings)
     toDownscale = get_scaled_resolution(str(input_path))
