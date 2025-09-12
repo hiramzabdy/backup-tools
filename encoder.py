@@ -1,8 +1,6 @@
-import os
 import sys
 import subprocess
 import argparse
-import time
 from pathlib import Path
 
 # ANSI color codes
@@ -11,8 +9,8 @@ RED = '\033[91m'
 YELLOW = '\033[93m'
 RESET = '\033[0m'
 
+#Extensions
 VIDEO_EXTS = ['.mp4', '.mov', '.mkv', '.avi', ".3gp"]
-
 
 def seconds_to_mmss(seconds):
     m = int(seconds // 60)
@@ -43,7 +41,7 @@ def get_frame_rate(path):
     ]
     result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     fr = result.stdout.strip()
-    # Puede venir como '239737/1000' o '240/1' o 'N/A'
+    # Either '239737/1000', '240/1' or 'N/A'
     try:
         if '/' in fr:
             num, den = fr.split('/')
@@ -64,11 +62,10 @@ def log_status(summary_path, video_name, status, error_lines=None):
                 for line in error_lines:
                     f.write(f"//{line}\n")
 
-def get_scaled_resolution(video_path: str) -> tuple[int, int]:
+def print_scaled_resolution(video_path):
     """
-    Given a video path, returns the scaled resolution (width, height).
-    If the video is already <=1080p (in both dimensions), returns the original resolution.
-    If larger, it scales it down to max 1080 in the larger dimension, preserving aspect ratio.
+    Given a video path, prints its resolution (width, height).
+    Also prints new downscaled resolution.
     """
     # Run ffprobe to get width and height
     cmd = [
@@ -89,10 +86,6 @@ def get_scaled_resolution(video_path: str) -> tuple[int, int]:
     except ValueError:
         raise ValueError("Could not parse resolution from ffprobe output.")
 
-    # Check if scaling is needed
-    if min(width, height) <= 1088:
-        return False  # No scaling needed
-
     # Determine scale factor
     if width <= height:
         scale_factor = 1080 / width
@@ -103,48 +96,31 @@ def get_scaled_resolution(video_path: str) -> tuple[int, int]:
     new_height = int(round(height * scale_factor))
     print(f"[Org. res] {width}x{height}")
     print(f"[New res] {RED} {new_width}x{new_height} {RESET}")
-    return True
 
-def encode_video(input_path, output_path, codec, summary_path, ccd=2):
-    duration = get_duration(input_path)
+def encode_video(vid, out_file, library, crf, preset, downscale):
+    duration = get_duration(vid)
     total_mmss = seconds_to_mmss(duration)
-    input_fps = get_frame_rate(input_path)
-
-    #if 28 < input_fps < 32:
-    #    output_fps = 30
-    #elif 58 < input_fps < 62:
-    #    output_fps = 60
+    input_fps = get_frame_rate(vid)
     
+    # Builds ffmpeg command.
+    cmd = ['ffmpeg', '-i', str(vid), '-c:v', str(library), '-crf', str(crf), '-preset', str(preset)]
+
+    # Downscales it to 1080p if codec set to av1 (for storage savings).
+    if downscale:
+        cmd += ["-vf", "scale='if(gt(a,1),-2,1080)':'if(gt(a,1),1080,-2)'"] #scale='if(gt(a,1),-2,1080)':'if(gt(a,1),1080,-2)'.
+        print_scaled_resolution(vid)
+
+    #Caps FPS at 240 since going above usually results in encoding error.
     if input_fps > 239:
-        output_fps = 240
-    else:
-        output_fps = None
+        cmd += ['-r', str(240)]
 
-    # Builds ffmpeg command
-    cmd = ['ffmpeg', '-i', str(input_path)]
-           
-    # Select codec, HEVC or AV1
-    if codec == "hevc":
-        cmd += ['-c:v', 'libx265', '-crf', '18', '-preset', 'slower'] # Default: 18, slower (or veryslow)
-    elif codec == "av1": 
-        cmd += ['-c:v', 'libsvtav1', '-crf', '36', '-preset', '2'] # Default: 36, 3
-
-    # Downscales it to 1080p if codec set to av1 (for storage savings)
-    toDownscale = get_scaled_resolution(str(input_path))
-    if codec == "av1" and toDownscale:
-        cmd += ["-vf", "scale='if(gt(a,1),-2,1080)':'if(gt(a,1),1080,-2)'"] #scale='if(gt(a,1),-2,1080)':'if(gt(a,1),1080,-2)'
-
-    # Caps FPS at 240
-    if output_fps:
-        cmd += ['-r', str(output_fps)]
-
-    cmd += ['-pix_fmt', 'yuv420p']  # Widely compatible, especially for web/streaming
+    cmd += ['-pix_fmt', 'yuv420p']  # Widely compatible format, may be omitted.
 
     cmd += ['-c:a', 'copy', '-map_metadata', '0',
-            '-y', '-progress', 'pipe:1', str(output_path)]
+            '-y', '-progress', 'pipe:1', str(out_file)]
 
+    #Runs the ffmpeg command.
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
-
     last_line_length = 0
     fps = 0
     bitrate = "0kbits/s"
@@ -194,50 +170,140 @@ def encode_video(input_path, output_path, codec, summary_path, ccd=2):
             raise subprocess.CalledProcessError(proc.returncode, cmd)
 
     except Exception as e:
-        if output_path.exists():
-            output_path.unlink()
         print(f"{RED}[ERROR]{RESET}")
         #log_status(summary_path, input_path.name, 'ERROR', [str(e)])
 
-def main():
-    parser = argparse.ArgumentParser(description='Codifica videos usando libx265 o libsvt-av1')
-    parser.add_argument('input_dir', help='Directorio con videos a procesar')
-    parser.add_argument('codec', help='Codec a utilizar (hevc, av1)')
-    parser.add_argument(
-        "ccd",
-        nargs="?",
-        default=2,
-        help="CCD a utilizar. [0 = CC0, 1 = CCD1, 2 = No afinity]"
+def get_presets(codec: str, quality: str, speed: str):
+    """
+    Maps codec, quality, and speed to ffmpeg parameters.
+    """
+
+    codec = codec.lower()
+    quality = quality.lower()
+    speed = speed.lower()
+
+    # Codec library mapping
+    codec_map = {
+        "avc": "libx264",
+        "hevc": "libx265",
+        "av1": "libsvtav1",
+    }
+
+    # Quality presets mapping
+    crf_map = {
+        "storage": {"avc": 28, "hevc": 28, "av1": 36},
+        "medium": {"avc": 24, "hevc": 24, "av1": 30},
+        "high": {"avc": 20, "hevc": 20, "av1": 24},
+    }
+
+    # Codec speed presets
+    if codec == "av1":
+        preset_map = {
+            "fast": "6",
+            "medium": "4",
+            "slow": "2",
+        }
+    else:
+        preset_map = {
+            "fast": "fast",
+            "medium": "medium",
+            "slow": "slow",
+        }
+    
+    library = codec_map[codec]
+    crf = crf_map[quality][codec]
+    preset = preset_map[speed]
+    return library, crf, preset
+
+def get_args():
+
+    parser = argparse.ArgumentParser(
+        description="Video transcoder using ffmpeg with standardized options."
     )
+
+    parser.add_argument(
+        "-i",
+        "--input-dir",
+        type=Path,
+        required=True,
+        help="Directory to process"
+    )
+    parser.add_argument(
+        "-c",
+        "--codec",
+        choices=["avc", "hevc", "av1"],
+        default="hevc",
+        help="Codec to use (default: hevc)"
+    )
+    parser.add_argument(
+        "-q",
+        "--quality",
+        choices=["storage", "medium", "high"],
+        default="medium",
+        help="Codec quality preset (default: medium)"
+    )
+    parser.add_argument(
+        "-s",
+        "--speed",
+        choices=["fast", "medium", "slow"],
+        default="slow",
+        help="Codec speed preset (default: slow)"
+    )
+    parser.add_argument(
+        "-e",
+        "--extension",
+        choices=[".mp4", ".mkv"],
+        default=".mkv",
+        help="Extension to use (default: .mkv)"
+    )
+    parser.add_argument(
+        "-d",
+        "--downscale",
+        choices=["yes", "no"],
+        default="no",
+        help="Downscale to 1080p (default: no)"
+    )
+
     args = parser.parse_args()
 
+    return args
+
+def main():
+    args = get_args()
+
     base_dir = Path(args.input_dir)
+    codec = args.codec
+    quality = args.quality
+    speed = args.speed
+    extension = args.extension
+    downscale = True if args.downscale.lower == "yes" else False
+
+    library, crf, preset = get_presets(codec, quality, speed)
+
     if not base_dir.is_dir():
-        print("El directorio especificado no existe.")
+        print("Directory does not exist")
         sys.exit(1)
         
-    codec = args.codec if args.codec else "hevc"
-    summary_log = base_dir / (codec + "_summary.log")
-    output_dir = base_dir / (codec)
+    output_dir = base_dir / (codec + "-" + quality + "-" + speed)
     output_dir.mkdir(exist_ok=True)
 
     videos = [f for f in base_dir.iterdir() if f.suffix.lower() in VIDEO_EXTS and f.is_file()]
     videos = sorted(videos)
     total = len(videos)
+
     if total == 0:
-        print("No se encontraron archivos de video para procesar.")
+        print("No videos were found")
         return
 
     for idx, vid in enumerate(videos, start=1):
-        print(f"[{idx}/{total}] Procesando: {vid.name}")
+        print(f"[{idx}/{total}] Processing: {vid.name}")
 
-        name = vid.stem + "_" + codec
-        out_file = output_dir / (name + '.mkv' if codec=="av1" else name + ".mp4") # or vid.suffix
-
+        out_file = output_dir / (vid.stem + "_" + codec + extension)
         if out_file.exists():
-            print(f"{YELLOW}[Saltando]{RESET}")
+            print(f"{YELLOW}[Skipping]{RESET}")
             continue
-        encode_video(vid, out_file, codec, summary_log, args.ccd)
+
+        encode_video(vid, out_file, library, crf, preset, downscale)
 
 if __name__ == '__main__':
     main()
