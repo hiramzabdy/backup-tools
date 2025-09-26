@@ -1,4 +1,3 @@
-import os
 import sys
 import subprocess
 import argparse
@@ -47,7 +46,7 @@ def get_psnr(orig: Path, comp: Path) -> float:
     ]
     res = subprocess.run(cmd, stderr=subprocess.PIPE, stdout=subprocess.DEVNULL, text=True)
     # parse stderr for average PSNR
-    # look for 'average:X' in PSNR line
+    # looks for 'average:X' in PSNR line
     m = re.search(r'average:(\d+\.?\d*)', res.stderr)
     return float(m.group(1)) if m else 0.0
 
@@ -69,10 +68,10 @@ def get_vmaf(orig: Path, comp: Path) -> float:
     cmd = [
         'ffmpeg', '-i', str(orig), '-i', str(comp),
         '-lavfi', '[0:v][1:v]libvmaf',
-        '-f', 'null', '-'
+        '-f', 'null', '-' # discard output
     ]
     res = subprocess.run(cmd, stderr=subprocess.PIPE, stdout=subprocess.DEVNULL, text=True)
-    # Busca algo como "VMAF score: 95.432100"
+    # looks for something like "VMAF score: 95.432100"
     m = re.search(r'(?i)VMAF score: *([\d\.]+)', res.stderr)
     return float(m.group(1)) if m else 0.0
 
@@ -81,34 +80,60 @@ def log_result(logfile, result):
         if result:
             f.write(f"{result}\n")
 
-def main():
-    parser = argparse.ArgumentParser(description='Comparar bitrate, PSNR, SSIM, VMAF entre dos directorios de video')
-    parser.add_argument('dir1', help='Directorio original')
-    parser.add_argument('dir2', help='Directorio codificado')
-    parser.add_argument("type", help="Tipo de prueba a aplicar (PSNR, SSIM, VMAF)")
+def get_args():
+    parser = argparse.ArgumentParser(
+        description="Gets and compares PSNR, SSIM and VMAF between original and transcoded videos"
+    )
+
+    parser.add_argument(
+        "-b",
+        "--base",
+        type=Path,
+        required=True,
+        help="Base directory"
+    )
+    parser.add_argument(
+        "-s",
+        "--secondary",
+        type=Path,
+        required=True,
+        help="Secondary directory"
+    )
+    parser.add_argument(
+        "-t",
+        "--type",
+        choices=["psnr", "ssim", "vmaf"],
+        default="vmaf",
+        help="Type of test (default: vmaf)"
+    )
+
     args = parser.parse_args()
+    return args
 
+def main():
+    args = get_args()
+    d1 = Path(args.base)
+    d2 = Path(args.secondary)
+    test_type = args.type
+
+    # Creates log file
     date_time = datetime.now().strftime("%Y%m%d_%H%M%S")
-    logfile_name = Path(args.dir2).name
-
+    logfile_name = Path(d2).name
     log_result(f"./{logfile_name}.log", date_time)
 
-    d1 = Path(args.dir1)
-    d2 = Path(args.dir2)
-    test_type = args.type
     if not d1.is_dir() or not d2.is_dir():
-        print('Ambos argumentos deben ser directorios válidos.')
+        print('Both arguments need to be a valid directory')
         sys.exit(1)
 
-    # iterate original videos
+    # iterate base videos
     for orig in sorted(d1.iterdir()):
         if not orig.is_file():
             continue
-        stem = orig.stem[:-5]
+        stem = orig.stem
         # find matching in dir2 (startswith stem)
         matches = [f for f in d2.iterdir() if f.is_file() and f.stem.startswith(stem)]
         if not matches:
-            print(f'{orig.name}: no se encontró correspondencia en {d2.name}')
+            print(f'{orig.name}: No video equivalent found in second directory: {d2.name}')
             continue
         comp = sorted(matches)[0]
         br1 = get_bitrate_mbps(orig)
