@@ -28,7 +28,7 @@ It standardizes options for popular codecs (H.264, H.265, AV1), supports CRF/pre
 - [FFmpeg](https://ffmpeg.org/download.html) compiled with:
   - `libx264`
   - `libx265`
-  - `libsvt-av1` (recommended: v3.0.2+ for speed and efficiency)
+  - `libsvt-av1` (recommended: v3.x.x for speed and efficiency)
 
 ## Usage
 
@@ -49,7 +49,7 @@ python3 encoder.py -i <input_directory> [options]
 
 Encode all videos in ./videos/ with AV1:
 ```
-python3 encoder.py -i ./testing/ -l libsvtav1 -q 32 -p 4
+python3 encoder.py -i ./videos/ -l libsvtav1 -q 32 -p 4
 ```
 Encode with H.265 to MP4, high quality, slow preset:
 ```

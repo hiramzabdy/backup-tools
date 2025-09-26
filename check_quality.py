@@ -38,7 +38,6 @@ def get_bitrate_mbps(path: Path) -> float:
         except:
             return 0.0
 
-
 def get_psnr(orig: Path, comp: Path) -> float:
     """Run ffmpeg PSNR filter and return average PSNR value."""
     cmd = [
@@ -51,7 +50,6 @@ def get_psnr(orig: Path, comp: Path) -> float:
     # look for 'average:X' in PSNR line
     m = re.search(r'average:(\d+\.?\d*)', res.stderr)
     return float(m.group(1)) if m else 0.0
-
 
 def get_ssim(orig: Path, comp: Path) -> float:
     """Run ffmpeg SSIM filter and return overall SSIM value."""
