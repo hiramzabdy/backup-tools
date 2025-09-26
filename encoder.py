@@ -115,8 +115,6 @@ def encode_video(vid, out_file, library, crf, preset, downscale):
     duration = get_duration(vid)
     total_mmss = seconds_to_mmss(duration)
     input_fps = get_frame_rate(vid)
-    
-    print(downscale)
 
     # Builds ffmpeg command.
     cmd = ['ffmpeg', '-i', str(vid), '-c:v', str(library), '-crf', str(crf), '-preset', str(preset)]
