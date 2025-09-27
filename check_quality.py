@@ -41,8 +41,12 @@ def get_psnr(orig: Path, comp: Path) -> float:
     """Run ffmpeg PSNR filter and return average PSNR value."""
     cmd = [
         'ffmpeg', '-i', str(orig), '-i', str(comp),
-        '-lavfi', '[0:v][1:v]psnr',
-        '-f', 'null', '-'  # discard output
+        '-lavfi', (
+            '[0:v]fps=60,scale=1920:1080,format=yuv420p[ref];'
+            '[1:v]fps=60,scale=1920:1080,format=yuv420p[dist];'
+            '[ref][dist]psnr'
+        ),
+        '-f', 'null', '-'
     ]
     res = subprocess.run(cmd, stderr=subprocess.PIPE, stdout=subprocess.DEVNULL, text=True)
     # parse stderr for average PSNR
@@ -54,8 +58,12 @@ def get_ssim(orig: Path, comp: Path) -> float:
     """Run ffmpeg SSIM filter and return overall SSIM value."""
     cmd = [
         'ffmpeg', '-i', str(orig), '-i', str(comp),
-        '-lavfi', '[0:v][1:v]ssim',
-        '-f', 'null', '-'  # discard output
+        '-lavfi', (
+            '[0:v]fps=60,scale=1920:1080,format=yuv420p[ref];'
+            '[1:v]fps=60,scale=1920:1080,format=yuv420p[dist];'
+            '[ref][dist]ssim'
+        ),
+        '-f', 'null', '-'
     ]
 
     res = subprocess.run(cmd, stderr=subprocess.PIPE, stdout=subprocess.DEVNULL, text=True)
@@ -67,8 +75,12 @@ def get_vmaf(orig: Path, comp: Path) -> float:
     """Run ffmpeg libvmaf filter and return overall VMAF score."""
     cmd = [
         'ffmpeg', '-i', str(orig), '-i', str(comp),
-        '-lavfi', '[0:v][1:v]libvmaf',
-        '-f', 'null', '-' # discard output
+        '-lavfi', (
+            '[0:v]fps=60,scale=1920:1080,format=yuv420p[ref];'
+            '[1:v]fps=60,scale=1920:1080,format=yuv420p[dist];'
+            '[ref][dist]libvmaf'
+        ),
+        '-f', 'null', '-'
     ]
     res = subprocess.run(cmd, stderr=subprocess.PIPE, stdout=subprocess.DEVNULL, text=True)
     # looks for something like "VMAF score: 95.432100"
