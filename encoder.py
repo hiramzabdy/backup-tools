@@ -109,7 +109,9 @@ def print_scaled_resolution(path):
     new_width = int(round(width * scale_factor))
     new_height = int(round(height * scale_factor))
     print(f"[Org. res] {width}x{height}")
-    print(f"[New res] {RED} {new_width}x{new_height} {RESET}")
+
+    if min(width, height) > 1080:
+        print(f"[New res] {RED} {new_width}x{new_height} {RESET}")
 
 def encode_video(vid, out_file, library, crf, preset, downscale):
     duration = get_duration(vid)
@@ -121,16 +123,21 @@ def encode_video(vid, out_file, library, crf, preset, downscale):
 
     # Downscales to 1080p if set
     if downscale:
-        vf = "scale='if(gt(a,1),-2,1080)':'if(gt(a,1),1080,-2)',format=yuv420p"
+        vf = "scale='min(1080,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease,format=yuv420p"
         cmd += ["-vf", vf]
         print_scaled_resolution(vid)
 
-    #Caps FPS at 240 since going above usually results in encoding error.
+    # Caps FPS at 240 since going above usually results in encoding error.
     if input_fps > 239:
         cmd += ['-r', str(240)]
 
+    # Downsamples audio to 96kbps if set
+    if downscale:
+        cmd += ["-c:a", "libopus", "-b:a", "64k"] # Might be 64k, 96k or 128k
+    else:
+        cmd += ["-c:a", "copy"]
 
-    cmd += ['-c:a', 'copy', '-map_metadata', '0',
+    cmd += ['-map_metadata', '0',
             '-y', '-progress', 'pipe:1', str(out_file)]
 
     #Runs the ffmpeg command.
@@ -202,20 +209,20 @@ def get_args():
         "-l",
         "--library",
         choices=["libx264", "libx265", "libsvtav1"],
-        default="libsvt-av1",
-        help="ffmpeg library to use"
+        default="libsvtav1",
+        help="ffmpeg library to use (default: libsvtav1)"
     )
     parser.add_argument(
         "-q",
         "--crf",
-        default="32",
-        help="Codec quality preset (Recommended range: 18-40)"
+        default="40",
+        help="Codec quality preset (Recommended range: 18-40, default: 40)"
     )
     parser.add_argument(
         "-p",
         "--preset",
         default="4",
-        help="Codec pedendant (medium, slow... or 1,2,3...)"
+        help="Codec dependant (medium, slow... or 1,2,3..., default: 4)"
     )
     parser.add_argument(
         "-e",
