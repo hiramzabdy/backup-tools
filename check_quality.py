@@ -42,8 +42,8 @@ def get_psnr(orig: Path, comp: Path) -> float:
     cmd = [
         'ffmpeg', '-i', str(orig), '-i', str(comp),
         '-lavfi', (
-            '[0:v]fps=60,scale=1920:1080,format=yuv420p[ref];'
-            '[1:v]fps=60,scale=1920:1080,format=yuv420p[dist];'
+            '[0:v]fps=30,scale=1920:1080,format=yuv420p[ref];'
+            '[1:v]fps=30,scale=1920:1080,format=yuv420p[dist];'
             '[ref][dist]psnr'
         ),
         '-f', 'null', '-'
@@ -59,8 +59,8 @@ def get_ssim(orig: Path, comp: Path) -> float:
     cmd = [
         'ffmpeg', '-i', str(orig), '-i', str(comp),
         '-lavfi', (
-            '[0:v]fps=60,scale=1920:1080,format=yuv420p[ref];'
-            '[1:v]fps=60,scale=1920:1080,format=yuv420p[dist];'
+            '[0:v]fps=30,scale=1920:1080,format=yuv420p[ref];'
+            '[1:v]fps=30,scale=1920:1080,format=yuv420p[dist];'
             '[ref][dist]ssim'
         ),
         '-f', 'null', '-'
@@ -76,8 +76,8 @@ def get_vmaf(orig: Path, comp: Path) -> float:
     cmd = [
         'ffmpeg', '-i', str(orig), '-i', str(comp),
         '-lavfi', (
-            '[0:v]fps=60,scale=1920:1080,format=yuv420p[ref];'
-            '[1:v]fps=60,scale=1920:1080,format=yuv420p[dist];'
+            '[0:v]fps=30,scale=1920:1080,format=yuv420p[ref];'
+            '[1:v]fps=30,scale=1920:1080,format=yuv420p[dist];'
             '[ref][dist]libvmaf'
         ),
         '-f', 'null', '-'
@@ -86,11 +86,6 @@ def get_vmaf(orig: Path, comp: Path) -> float:
     # looks for something like "VMAF score: 95.432100"
     m = re.search(r'(?i)VMAF score: *([\d\.]+)', res.stderr)
     return float(m.group(1)) if m else 0.0
-
-def log_result(logfile, result):
-    with open(logfile, 'a', encoding='utf-8') as f:
-        if result:
-            f.write(f"{result}\n")
 
 def get_args():
     parser = argparse.ArgumentParser(
@@ -102,21 +97,21 @@ def get_args():
         "--base",
         type=Path,
         required=True,
-        help="Base directory"
+        help="Base directory, taken as reference"
     )
     parser.add_argument(
         "-s",
         "--secondary",
         type=Path,
         required=True,
-        help="Secondary directory"
+        help="Secondary directory, quality checks"
     )
     parser.add_argument(
         "-t",
-        "--type",
+        "--mode",
         choices=["psnr", "ssim", "vmaf"],
-        default="vmaf",
-        help="Type of test (default: vmaf)"
+        default="ssim",
+        help="Type of test (default: ssim)"
     )
 
     args = parser.parse_args()
@@ -124,44 +119,38 @@ def get_args():
 
 def main():
     args = get_args()
-    d1 = Path(args.base)
-    d2 = Path(args.secondary)
-    test_type = args.type
+    base_dir = Path(args.base)
+    secondary_dir = Path(args.secondary)
+    mode = args.mode
 
-    # Creates log file
-    date_time = datetime.now().strftime("%Y%m%d_%H%M%S")
-    logfile_name = Path(d2).name
-    log_result(f"./{logfile_name}.log", date_time)
-
-    if not d1.is_dir() or not d2.is_dir():
-        print('Both arguments need to be a valid directory')
+    if not base_dir.is_dir() or not secondary_dir.is_dir():
+        print(f"One of the directories doesn't exist")
         sys.exit(1)
 
-    # iterate base videos
-    for orig in sorted(d1.iterdir()):
+    # Iterates base videos
+    for orig in sorted(base_dir.iterdir()):
         if not orig.is_file():
             continue
         stem = orig.stem
-        # find matching in dir2 (startswith stem)
-        matches = [f for f in d2.iterdir() if f.is_file() and f.stem.startswith(stem)]
+        # Finds matching in secondary directory
+        matches = [f for f in secondary_dir.iterdir() if f.is_file() and f.stem.startswith(stem)]
         if not matches:
-            print(f'{orig.name}: No video equivalent found in second directory: {d2.name}')
+            print(f'{orig.name}: No video equivalent found in second directory: {secondary_dir.name}')
             continue
         comp = sorted(matches)[0]
         br1 = get_bitrate_mbps(orig)
         br2 = get_bitrate_mbps(comp)
 
-        if test_type == "psnr":
+        if mode == "psnr":
             psnr = get_psnr(orig, comp)
             result = (f"{orig.name}: {br1:.2f} Mbps => {br2:.2f} Mbps, PSNR={psnr:.2f} dB")
-        elif test_type == "ssim":
+        elif mode == "ssim":
             ssim = get_ssim(orig, comp)
             result = (f"{orig.name}: {br1:.2f} Mbps => {br2:.2f} Mbps, SSIM={ssim:.4f}")
         else:
             vmaf = get_vmaf(orig, comp)
             result = (f"{orig.name}: {br1:.2f} Mbps => {br2:.2f} Mbps, VMAF={vmaf:.4f}")
 
-        log_result(f"./{logfile_name}.log", result)
         print(result)
 
 if __name__ == '__main__':

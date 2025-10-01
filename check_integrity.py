@@ -11,14 +11,16 @@ RESET = '\033[0m'
 
 
 def seconds_to_mmss(seconds):
+    """
+    Receives a duration in seconds (possibly greater than 60) and returns it in mm:ss format.
+    """
     m = int(seconds // 60)
     s = int(seconds % 60)
     return f"{m:02d}:{s:02d}"
 
-
 def get_duration(path):
     """
-    Devuelve la duración en segundos del archivo de video usando ffprobe.
+    Returns video duration in seconds as a float.
     """
     cmd = [
         'ffprobe', '-v', 'error',
@@ -35,16 +37,12 @@ def get_duration(path):
 
 def validate_decode(output_path):
     """
-    Prueba de decodificación usando el decoder interno de FFmpeg para AV1.
-    Forzamos el codec de decodificación software con '-c:v av1'.
-    Comando:
-        ffmpeg -v error -c:v av1 -i archivo -f null -
-    Devuelve (True, None) si pasa, o (False, [líneas de error]) si falla.
+    Tests video decoding to check integrity.
     """
     cmd = [
         'ffmpeg',
         '-v', 'error',
-        '-c:v', 'hevc',
+        '-c:v', "hevc",
         '-i', str(output_path),
         '-f', 'null',
         '-'
@@ -56,6 +54,10 @@ def validate_decode(output_path):
         return False, proc.stderr.splitlines()
 
 def delete_vids(vids):
+    """
+    Receives a list of videos, then iterates it and deletes them.
+    Can be used to delete any files in a list, not only videos.
+    """
     for file_path in vids:
         path = Path(file_path)
         try:
@@ -66,91 +68,119 @@ def delete_vids(vids):
         except Exception as e:
             print(f"Error deleting {file_path}: {e}")
 
-def main():
+def get_args():
     parser = argparse.ArgumentParser(
-        description='Valida integridad de videos codificados HEVC'
+        description="Checks integrity of videos in a directory, taking originals as reference"
     )
-    parser.add_argument('base_dir', help='Directorio raíz con videos originales/')
-    parser.add_argument('output_dir', help='Directorio raíz con videos codificados/')
+
     parser.add_argument(
-        'mode',
-        choices=['time', 'code', 'both'],
-        help='Tipo de comprobación: time, code o both'
+        "-b",
+        "--base",
+        type=Path,
+        required=True,
+        help="Base directory, taken as reference"
     )
     parser.add_argument(
-        "delete",
-        nargs="?",
+        "-s",
+        "--secondary",
+        type=Path,
+        required=True,
+        help="Secondary directory, integrity checks"
+    )
+    parser.add_argument(
+        "-t",
+        "--mode",
+        choices=["time", "code", "both"],
+        default="time",
+        help="Type of test (default: time)"
+    )
+    parser.add_argument(
+        "-d",
+        "--delete",
+        choices=["yes", "no"],
         default="no",
-        help="Borrar archivos más grandes que el archivo original. [del, no] (Default: no)"
+        help="Deletes videos that don't pass the integrity check (default: no)"
     )
+
     args = parser.parse_args()
+    return args
 
-    base_dir = Path(args.base_dir)
-    output_dir = Path(args.output_dir)
-    margin = 0.5
-    delete = True if args.delete == "del" else False
+def main():
+    args = get_args()
+    base_dir = Path(args.base)
+    secondary_dir = Path(args.secondary)
+    mode = args.mode
+    margin = 0.5 # Time margin in seconds allowed between base and secondary videos. Default: 0.5
+    delete = True if args.delete == "yes" else False
 
-    if not output_dir.is_dir() or not base_dir.is_dir():
-        print(f"Uno de los dos directorios no existe.")
+    if not secondary_dir.is_dir() or not base_dir.is_dir():
+        print(f"One of the directories doesn't exist")
         sys.exit(1)
 
-    coded_videos = sorted([f for f in output_dir.iterdir() if f.is_file()])    
+    coded_videos = sorted([f for f in secondary_dir.iterdir() if f.is_file()])    
     total = len(coded_videos)
     vids_To_Delete = []
 
     if total == 0:
-        print("No se encontraron archivos en " + output_dir + ".")
+        print("No videos were found in " + secondary_dir + ".")
         return
 
     for idx, vid in enumerate(coded_videos, start=1):
         print(f"[{idx}/{total}] ==> {vid.name}")
 
-        # Comprobación de tiempo
-        if args.mode in ['time', 'both']:
-            orig_stem = vid.stem[:-5] if vid.stem.endswith('_hevc') else vid.stem[:-4]
+        # Time check
+        if mode in ['time', 'both']:
+            orig_stem = vid.stem
             orig = base_dir / (orig_stem + ".mp4")
-            orig3gp = base_dir / (orig_stem + ".3gp")
 
+            #Checks other extension in case .mp4 is not found.
             if not orig.exists():
-                orig = orig3gp
+                orig = base_dir / (orig_stem + ".3gp")
+            if not orig.exists():
+                orig = base_dir / (orig_stem + ".mkv")
 
-            dur_vid = get_duration(vid)
-            dur_orig = get_duration(orig)
+            dur_secondary = get_duration(vid)
+            dur_original = get_duration(orig)
 
-            if dur_vid is None:
-                print(f"  {YELLOW}[WARN]{RESET} No se pudo leer duración del archivo resultante.")
+            if dur_secondary is None:
+                print(f"  {YELLOW}[WARN]{RESET} Couldn't get secondary video duration")
                 vids_To_Delete.append(vid)
-            elif dur_orig is None:
-                print(f"  {YELLOW}[WARN]{RESET} Original no encontrado para comparar duración.")
+            elif dur_original is None:
+                print(f"  {YELLOW}[WARN]{RESET} Original video not found.")
             else:
-                diff = abs(dur_vid - dur_orig)
-                mmss_orig = seconds_to_mmss(dur_orig)
-                mmss_av1 = seconds_to_mmss(dur_vid)
+                diff = abs(dur_secondary - dur_original)
+                mmss_original = seconds_to_mmss(dur_original)
+                mmss_secondary = seconds_to_mmss(dur_secondary)
                 if diff <= margin:
-                    print(f"  {GREEN}[OK]{RESET} Duración OK (orig: {mmss_orig}, av1: {mmss_av1}).")
+                    print(f"  {GREEN}[OK]{RESET} Duraction OK (Original: {mmss_original}, Secondary: {mmss_secondary}).")
                 else:
                     print(
-                        f"  {RED}[ERROR]{RESET} Duración difiere más de {margin}s: "
-                        f"orig {mmss_orig}, av1 {mmss_av1}."
+                        f"{RED}[ERROR]{RESET} Duration differs in more than {margin}s."
+                        f"Original: {mmss_original}, Secondary: {mmss_secondary}."
                     )
                     vids_To_Delete.append(vid)
 
-        # Comprobación de decodificación
-        if args.mode in ['code', 'both']:
+        # Decoding test
+        if mode in ['code', 'both']:
             ok_decode, errors = validate_decode(vid)
             if ok_decode:
-                print(f"  {GREEN}[OK]{RESET} Decodificación correcta.")
+                print(f"  {GREEN}[OK]{RESET} Decoding successful.")
             else:
-                print(f"  {RED}[ERROR]{RESET} Falló decodificación:")
+                print(f"  {RED}[ERROR]{RESET} Decoding failed:")
                 for line in errors:
-                    print(f"    {line}")
-                if args.mode == 'code':
-                    continue
-                if args.mode == 'both':
-                    continue
+                    print(f"{line}")
+
+    # Deleting logic
     if delete:
-        #print(f"{RED}Deleting the following videos{RESET}")
-        delete_vids(vids_To_Delete)
+        if vids_To_Delete:
+            print(f"{RED}\nDeleting the following videos:{RESET}")
+            for video in vids_To_Delete:
+                print(video.name)
+            confirm = input("\nDo you want to delete them? (y/N): ").strip().lower()
+            if confirm == "y":
+                delete_vids(vids_To_Delete)
+            else:
+                print("Deletion cancelled")
 
 if __name__ == '__main__':
     main()

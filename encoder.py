@@ -16,7 +16,7 @@ VIDEO_EXTS = ['.mp4', '.mov', '.mkv', '.avi', ".3gp"]
 """
 For Original Quality (Almost unnoticable compression):
 libx265: -crf: 18, preset: slow
-libsvt-av1: -crf: 24, preset: 4
+libsvt-av1: -crf: 24, preset: 2
 
 For Storage Savings (Somewhat noticable difference)
 libx265: -crf: 30, preset: slow
@@ -121,7 +121,7 @@ def encode_video(vid, out_file, library, crf, preset, downscale):
     # Builds ffmpeg command.
     cmd = ['ffmpeg', '-i', str(vid), '-c:v', str(library), '-crf', str(crf), '-preset', str(preset)]
 
-    # Downscales to 1080p if set
+    # Downscales to 1080p 8 bits
     if downscale:
         vf = "scale='min(1080,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease,format=yuv420p"
         cmd += ["-vf", vf]
@@ -131,7 +131,7 @@ def encode_video(vid, out_file, library, crf, preset, downscale):
     if input_fps > 239:
         cmd += ['-r', str(240)]
 
-    # Downsamples audio to 96kbps if set
+    # Downsamples audio to 128kbps opus
     if downscale:
         cmd += ["-c:a", "libopus", "-b:a", "64k"] # Might be 64k, 96k or 128k
     else:
@@ -216,13 +216,13 @@ def get_args():
         "-q",
         "--crf",
         default="40",
-        help="Codec quality preset (Recommended range: 18-40, default: 40)"
+        help="Codec quality level (default: 40)"
     )
     parser.add_argument(
         "-p",
         "--preset",
         default="4",
-        help="Codec dependant (medium, slow... or 1,2,3..., default: 4)"
+        help="Codec efficiency level (Codec dependant) (default: 4)"
     )
     parser.add_argument(
         "-e",
