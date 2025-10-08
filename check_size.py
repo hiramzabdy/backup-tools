@@ -123,7 +123,7 @@ def main():
             vids_To_Delete.append(vid)
 
     print(f"\nOriginal size: {all_original_size:.1f} MB\nNew size: {all_coded_size:.1f} MB\nDiference: {(all_original_size-all_coded_size):.1f} MB ({all_diff_percentage:.1f}%)\n")
-    print(f"Videos bigger than margin: {len(vids_To_Delete)}")
+    print(f"Videos bigger than margin ({margin}%): {len(vids_To_Delete)}")
 
     # Deleting logic
     if delete:
@@ -136,7 +136,6 @@ def main():
                 delete_vids(vids_To_Delete)
             else:
                 print("Deletion cancelled")
-
 
 if __name__ == '__main__':
     main()

@@ -5,6 +5,15 @@ from pathlib import Path
 import re
 from datetime import datetime
 
+# ANSI color codes
+GREEN = '\033[92m'
+RED = '\033[91m'
+YELLOW = '\033[93m'
+RESET = '\033[0m'
+
+#Extensions
+VIDEO_EXTS = ['.mp4', '.mov', '.mkv', '.avi', ".3gp"]
+
 def get_bitrate_mbps(path: Path) -> float:
     """Get or estimate video bitrate in Mbps."""
     # try metadata
@@ -127,12 +136,18 @@ def main():
         print(f"One of the directories doesn't exist")
         sys.exit(1)
 
+    all_results = []
+    videos = [f for f in base_dir.iterdir() if f.suffix.lower() in VIDEO_EXTS and f.is_file()]
+    videos = sorted(videos)
+    total = len(videos)
+
     # Iterates base videos
-    for orig in sorted(base_dir.iterdir()):
+    for idx, orig in enumerate(videos, start=1):
         if not orig.is_file():
             continue
         stem = orig.stem
         # Finds matching in secondary directory
+        print(f"[{idx}/{total}] Processing: {orig.name}")
         matches = [f for f in secondary_dir.iterdir() if f.is_file() and f.stem.startswith(stem)]
         if not matches:
             print(f'{orig.name}: No video equivalent found in second directory: {secondary_dir.name}')
@@ -143,15 +158,24 @@ def main():
 
         if mode == "psnr":
             psnr = get_psnr(orig, comp)
-            result = (f"{orig.name}: {br1:.2f} Mbps => {br2:.2f} Mbps, PSNR={psnr:.2f} dB")
+            all_results.append(psnr)
+            result = (f"{orig.name}: {br1:.2f} Mbps => {br2:.2f} Mbps, {GREEN}PSNR: {psnr:.2f} dB{RESET}")
         elif mode == "ssim":
             ssim = get_ssim(orig, comp)
-            result = (f"{orig.name}: {br1:.2f} Mbps => {br2:.2f} Mbps, SSIM={ssim:.4f}")
+            all_results.append(ssim)
+            result = (f"{orig.name}: {br1:.2f} Mbps => {br2:.2f} Mbps, {GREEN}SSIM: {ssim:.4f}{RESET}")
         else:
             vmaf = get_vmaf(orig, comp)
-            result = (f"{orig.name}: {br1:.2f} Mbps => {br2:.2f} Mbps, VMAF={vmaf:.4f}")
+            all_results.append(vmaf)
+            result = (f"{orig.name}: {br1:.2f} Mbps => {br2:.2f} Mbps, {GREEN}VMAF: {vmaf:.4f}{RESET}")
 
-        print(result)
+        print(f"Result: {result}")
+    
+    average_result = sum(all_results) / len(all_results)
+    decimals = 2 if mode == "psnr" else 4
+    average_result = round(average_result, decimals)
+    print(f"Average {mode}: {average_result}.")
+
 
 if __name__ == '__main__':
     main()

@@ -15,12 +15,16 @@ VIDEO_EXTS = ['.mp4', '.mov', '.mkv', '.avi', ".3gp"]
 #Recomended values
 """
 For Original Quality (Almost unnoticable compression):
-libx265: -crf: 18, preset: slow
-libsvt-av1: -crf: 24, preset: 2
+--library libx265 --crf 18 --preset slow
+--library libsvtav1 --crf 24 --preset 2
 
-For Storage Savings (Somewhat noticable difference)
-libx265: -crf: 30, preset: slow
-libsvt-av1: -crf: 36, preset: 2
+For Storage Savings (Somewhat noticable difference):
+--library libx265 --crf 30 --preset: slow
+--library libsvtav1 --crf 36, --preset 2
+
+For EXTREME Storage Savings (Noticable difference, still not potato-like videos):
+--library libsvtav1 --crf 48 --preset 2 --downscale yes
+This option turned a 350GB smartphones videos backup into a lite 9.3GB backup (2.6% of the original size).
 
 1. For libx265 (hevc), going past slow (i.e. slower, veryslow) doesn't always increase compression efficiency.
 2. Newer versions of libsvt-av1 are way faster to encode and provide better efficiency.
@@ -244,7 +248,6 @@ def get_args():
 
 def main():
     args = get_args()
-
     base_dir = Path(args.input)
     library = args.library
     crf = args.crf
