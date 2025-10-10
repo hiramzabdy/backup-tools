@@ -14,12 +14,11 @@ VIDEO_EXTS = ['.mp4', '.mov', '.mkv', '.avi', ".3gp"]
 
 #Recomended values
 """
-For Original Quality (Almost unnoticable compression):
+For Original Quality (Pretty much unnoticable compression):
 --library libx265 --crf 18 --preset slow
 --library libsvtav1 --crf 24 --preset 2
 
-For Storage Savings (Somewhat noticable difference):
---library libx265 --crf 30 --preset: slow
+For Storage Savings (Somewhat noticable difference, not thoroughly tested):
 --library libsvtav1 --crf 36, --preset 2
 
 For EXTREME Storage Savings (Noticable difference, still not potato-like videos):
@@ -27,7 +26,7 @@ For EXTREME Storage Savings (Noticable difference, still not potato-like videos)
 This option turned a 350GB smartphones videos backup into a lite 9.3GB backup (2.6% of the original size).
 
 1. For libx265 (hevc), going past slow (i.e. slower, veryslow) doesn't always increase compression efficiency.
-2. Newer versions of libsvt-av1 are way faster to encode and provide better efficiency.
+2. Newer versions of libsvtav1 are way faster to encode and provide better efficiency.
 I tested this script using libsvt-av1 3.0.2. If your libsvt-av1 is in the 1.x.x version, I'd recommend
 manually compiling ffmpeg with a newer libsvt-av1 version.
 3. I'll include more references here once I test each encoder more thoroughly.
@@ -112,10 +111,10 @@ def print_scaled_resolution(path):
 
     new_width = int(round(width * scale_factor))
     new_height = int(round(height * scale_factor))
-    print(f"[Org. res] {width}x{height}")
+    print(f"[Org res] {width}x{height}")
 
     if min(width, height) > 1080:
-        print(f"[New res] {RED} {new_width}x{new_height} {RESET}")
+        print(f"[New res] {RED}{new_width}x{new_height}{RESET}")
 
 def encode_video(vid, out_file, library, crf, preset, downscale):
     duration = get_duration(vid)

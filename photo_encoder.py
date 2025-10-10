@@ -31,25 +31,29 @@ def resize_image(path: str, megapixels: int) -> str:
     with Image.open(path) as img:
         w, h = img.size
         current_mp = (int(w) * int(h))
-
         target_pixels = megapixels * 1_000_000
 
-        print(megapixels)
+        # Prints current resolution
+        xmp = current_mp / 1_000_000
+        print(f"[Org Res] {w}x{h} [{xmp:.1f}MP]")
 
+        # Returns if no need for resizing
         if current_mp <= target_pixels:
-            # No resize needed
             return path
 
-        # scale factor to match target MP
+        # Scale factor to match target MP
         scale = math.sqrt(target_pixels / current_mp)
         new_w = int(w * scale)
         new_h = int(h * scale)
 
+        # Saves downscaled img to temp file
         resized = img.resize((new_w, new_h), Image.LANCZOS)
-
         tmp_path = path + ".resized.png"
         resized.save(tmp_path, format="PNG")
 
+        # Prints new resolution, returns downscaled img
+        nmp = (new_w * new_h) / 1_000_000
+        print(f"[New Res] {RED}{new_w}x{new_h}{RESET}, [{nmp:.1f}MP]")
         return tmp_path
 
 def encode_image(path: str, out_file: str, megapixels: int, quality: int = 40, preset: int = 2) -> None:
@@ -76,26 +80,47 @@ def encode_image(path: str, out_file: str, megapixels: int, quality: int = 40, p
 
 def process_image(path, out_file, megapixels: int, quality=40, preset=2):
     """
-    Resize and encode a single image into AVIF format.
-
+    Resize and encode a single image into AVIF format using libsvtav1.
     Args:
         path (Path or str): Input image path.
-        out_file (Path or str): Output .avif file path (without extension).
+        out_file (Path or str): Output file path (e.g. picture.avif).
         megapixels (int): Target megapixel cap (e.g. 12).
         quality (int): AVIF quantizer (lower = higher quality).
         preset (int): AVIF speed preset (0 = slowest, best compression).
     """
+
+    # Returns if output file exists
+    if out_file.exists():
+        print(f"{YELLOW}[Skipping]{RESET}")
+        return
+
+    # Creates temp img for resizing to max MegaPixels if needed
     tmp = resize_image(str(path), megapixels)
 
+    # Builds ffmpeg command
     cmd = [
         "ffmpeg", "-y",
-        "-i", str(path),
-        "-c:v", "libsvtav1",
-        "-crf", str(quality),
-        "-preset", str(preset),
+        "-i", str(tmp),
+        "-map_metadata", "0",             # copy metadata
+        "-frames:v", "1",                 # single frame (treat as image)
+        "-c:v", "libsvtav1",              # AV1 encoder
+        "-crf", str(quality),             # quality
+        "-preset", str(preset),           # speed/compression tradeoff
+        "-pix_fmt", "yuv420p",            # yuv420p 8bits depth
         str(out_file)
     ]
-    subprocess.run(cmd, check=True)
+
+    try:
+        subprocess.run(
+            cmd,
+            check=True,
+            stdout=subprocess.DEVNULL,    # silence stdout
+            stderr=subprocess.PIPE        # capture stderr
+        )
+        print(f"{GREEN}[OK]{RESET}")      # success
+    except subprocess.CalledProcessError as e:
+        print(f"{RED}[ERROR]{RESET} during ffmpeg execution:")
+        print(e.stderr.decode())
 
     # cleanup temp resize file if it was created
     if tmp != str(path) and os.path.exists(tmp):
@@ -142,29 +167,29 @@ def main():
     quality = args.quality
     preset = args.preset
 
+    # Checks if input directory exists
     if not base_dir.is_dir():
         print("Directory does not exist")
         sys.exit(1)
 
+    # Creates output directory
     output_dir = base_dir / (megapixels + "mp-" + quality + "q-" + preset + "p")
     output_dir.mkdir(exist_ok=True)
 
+    # Selects all images in input files, sorts and then counts them
     images = [f for f in base_dir.iterdir() if f.suffix.lower() in IMAGE_EXTS and f.is_file()]
     images = sorted(images)
     total = len(images)
 
+    # Stops if no images were found
     if total == 0:
         print("No pictures were found")
         return
     
+    # Processes each image, printing current/remaining items to console.
     for idx, img in enumerate(images, start=1):
         print(f"[{idx}/{total}] Processing: {img.name}")
-
         out_file = output_dir / (img.stem + ".avif")
-        if out_file.exists():
-            print(f"{YELLOW}[Skipping]{RESET}")
-            continue
-
         process_image(img, out_file, int(megapixels), quality, preset)
 
 if __name__ == "__main__":
