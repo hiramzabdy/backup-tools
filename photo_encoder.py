@@ -6,22 +6,21 @@ import argparse
 from pathlib import Path
 from PIL import Image
 
-# ANSI color codes
+# ANSI color codes.
 GREEN = '\033[92m'
 RED = '\033[91m'
 YELLOW = '\033[93m'
 RESET = '\033[0m'
 
-#Extensions
+# Extensions.
 IMAGE_EXTS = ['.jpg', '.jpeg', '.png', '.heic', ".heif", ".webp", ".avif"]
 
-def get_megapixels(path: str) -> float:
-    """
-    Returns the megapixel count of the image.
-    """
-    with Image.open(path) as img:
-        w, h = img.size
-    return (w * h) / 1_000_000
+# Notes:
+"""
+For EXTREME Storage Savings (Noticable difference, still not radio-like photos):
+--quality 40 --preset 2 --x 12
+This option turned a 50GB smartphones photos backup into a 2.5GB backup (2.5% of the original size).
+"""
 
 def resize_image(path: str, megapixels: int) -> str:
     """
@@ -29,54 +28,36 @@ def resize_image(path: str, megapixels: int) -> str:
     Returns the path of the resized temp image.
     """
     with Image.open(path) as img:
-        w, h = img.size
-        current_mp = (int(w) * int(h))
+
+        # Converts target megapixels to pixels.
         target_pixels = megapixels * 1_000_000
 
-        # Prints current resolution
-        xmp = current_mp / 1_000_000
-        print(f"[Org Res] {w}x{h} [{xmp:.1f}MP]")
+        # Gets original size (w, h, pixels).
+        w, h = img.size
+        pixels = (int(w) * int(h))
 
-        # Returns if no need for resizing
-        if current_mp <= target_pixels:
+        # Prints original resolution.
+        megapixels = pixels / 1_000_000
+        print(f"[Org Res] {w}x{h} [{megapixels:.1f}MP]")
+
+        # Returns if no need for resizing.
+        if pixels <= target_pixels:
             return path
 
-        # Scale factor to match target MP
-        scale = math.sqrt(target_pixels / current_mp)
+        # Scales width and heigth to match target MP.
+        scale = math.sqrt(target_pixels / pixels)
         new_w = int(w * scale)
         new_h = int(h * scale)
 
-        # Saves downscaled img to temp file
+        # Saves downscaled img to temp file.
         resized = img.resize((new_w, new_h), Image.LANCZOS)
         tmp_path = path + ".resized.png"
         resized.save(tmp_path, format="PNG")
 
-        # Prints new resolution, returns downscaled img
-        nmp = (new_w * new_h) / 1_000_000
-        print(f"[New Res] {RED}{new_w}x{new_h}{RESET}, [{nmp:.1f}MP]")
+        # Prints new resolution, returns downscaled img.
+        new_megapixels = (new_w * new_h) / 1_000_000
+        print(f"[New Res] {RED}{new_w}x{new_h}{RESET}, [{new_megapixels:.1f}MP]")
         return tmp_path
-
-def encode_image(path: str, out_file: str, megapixels: int, quality: int = 40, preset: int = 2) -> None:
-    """
-    Resizes image to target megapixels and encodes it as AVIF using avifenc.
-    """
-    tmp = resize_image(path, megapixels)
-
-    # Build avifenc command
-    cmd = [
-        "avifenc",
-        "--min", "0",
-        "--max", str(quality),
-        "--speed", str(preset),
-        "--yuv", "420",            # change to 444 if you want better color
-        tmp, out_file
-    ]
-
-    subprocess.run(cmd, check=True)
-
-    # cleanup if we created a temp file
-    if tmp != path and os.path.exists(tmp):
-        os.remove(tmp)
 
 def process_image(path, out_file, megapixels: int, quality=40, preset=2):
     """
@@ -89,40 +70,41 @@ def process_image(path, out_file, megapixels: int, quality=40, preset=2):
         preset (int): AVIF speed preset (0 = slowest, best compression).
     """
 
-    # Returns if output file exists
+    # Returns if output file exists.
     if out_file.exists():
         print(f"{YELLOW}[Skipping]{RESET}")
         return
 
-    # Creates temp img for resizing to max MegaPixels if needed
+    # Creates temp img for resizing to max megapixels if needed.
     tmp = resize_image(str(path), megapixels)
 
-    # Builds ffmpeg command
+    # Builds ffmpeg command.
     cmd = [
         "ffmpeg", "-y",
         "-i", str(tmp),
-        "-map_metadata", "0",             # copy metadata
-        "-frames:v", "1",                 # single frame (treat as image)
-        "-c:v", "libsvtav1",              # AV1 encoder
-        "-crf", str(quality),             # quality
-        "-preset", str(preset),           # speed/compression tradeoff
-        "-pix_fmt", "yuv420p",            # yuv420p 8bits depth
+        "-map_metadata", "0",             # Copy metadata.
+        "-frames:v", "1",                 # Single frame (treat as image).
+        "-c:v", "libsvtav1",              # AV1 encoder.
+        "-crf", str(quality),             # Quality.
+        "-preset", str(preset),           # Speed/compression tradeoff.
+        "-pix_fmt", "yuv420p",            # yuv420p 8bits depth.
         str(out_file)
     ]
 
+    # Runs ffmpeg command.
     try:
         subprocess.run(
             cmd,
             check=True,
-            stdout=subprocess.DEVNULL,    # silence stdout
-            stderr=subprocess.PIPE        # capture stderr
+            stdout=subprocess.DEVNULL,    # Silence stdout.
+            stderr=subprocess.PIPE        # Capture stderr.
         )
-        print(f"{GREEN}[OK]{RESET}")      # success
-    except subprocess.CalledProcessError as e:
+        print(f"{GREEN}[OK]{RESET}")      # Success.
+    except subprocess.CalledProcessError as e: # Handles error.
         print(f"{RED}[ERROR]{RESET} during ffmpeg execution:")
         print(e.stderr.decode())
 
-    # cleanup temp resize file if it was created
+    # cleanup temp resize file if it was created.
     if tmp != str(path) and os.path.exists(tmp):
         os.remove(tmp)
 
@@ -136,52 +118,53 @@ def get_args():
         "--input",
         type=Path,
         required=True,
-        help="Directory to process"
-    )
-    parser.add_argument(
-        "-x",
-        "--megapixels",
-        default="12",
-        help="Maximun size in MegaPixels per image (default: 12)"
+        help="Directory to process."
     )
     parser.add_argument(
         "-q",
         "--quality",
-        default="40",
-        help="Compression quality (default: 40)"
+        default="32",
+        help="Compression quality (default: 32)."
     )
     parser.add_argument(
         "-p",
         "--preset",
         default="2",
-        help="Compression efficiency level (default: 2)"
+        help="Compression efficiency level (default: 2)."
+    )
+    parser.add_argument(
+        "-x",
+        "--megapixels",
+        default="20",
+        help="Maximun size in MegaPixels per image (default: 20)."
     )
 
     args = parser.parse_args()
     return args
 
 def main():
+    # Assigns args to variables.
     args = get_args()
     base_dir = Path(args.input)
     megapixels = args.megapixels
     quality = args.quality
     preset = args.preset
 
-    # Checks if input directory exists
+    # Checks if input directory exists.
     if not base_dir.is_dir():
         print("Directory does not exist")
         sys.exit(1)
 
-    # Creates output directory
+    # Creates output directory.
     output_dir = base_dir / (megapixels + "mp-" + quality + "q-" + preset + "p")
     output_dir.mkdir(exist_ok=True)
 
-    # Selects all images in input files, sorts and then counts them
+    # Selects all images in input files, sorts and then counts them.
     images = [f for f in base_dir.iterdir() if f.suffix.lower() in IMAGE_EXTS and f.is_file()]
     images = sorted(images)
     total = len(images)
 
-    # Stops if no images were found
+    # Stops if no images were found.
     if total == 0:
         print("No pictures were found")
         return
