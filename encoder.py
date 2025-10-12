@@ -9,12 +9,12 @@ RED = '\033[91m'
 YELLOW = '\033[93m'
 RESET = '\033[0m'
 
-#Extensions
+# Extensions
 VIDEO_EXTS = ['.mp4', '.mov', '.mkv', '.avi', ".3gp"]
 
-#Recomended values
+# Recomended values
 """
-For Original Quality (Pretty much unnoticable compression):
+For Original Quality (Pretty much unnoticeable compression):
 --library libx265 --crf 18 --preset slow
 --library libsvtav1 --crf 24 --preset 2
 
@@ -31,6 +31,9 @@ I tested this script using libsvt-av1 3.0.2. If your libsvt-av1 is in the 1.x.x 
 manually compiling ffmpeg with a newer libsvt-av1 version.
 3. I'll include more references here once I test each encoder more thoroughly.
 """
+
+# Auxiliary Functions
+
 def get_duration(path):
     """
     Given a video path, gets its duration and returns it as a float
@@ -115,6 +118,11 @@ def print_scaled_resolution(path):
 
     if min(width, height) > 1080:
         print(f"[New res] {RED}{new_width}x{new_height}{RESET}")
+
+def get_audio_bitrate(path):
+    pass
+
+# Main Functions
 
 def encode_video(vid, out_file, library, crf, preset, downscale):
     duration = get_duration(vid)
