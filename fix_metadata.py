@@ -15,6 +15,7 @@ RESET = '\033[0m'
 IMAGE_EXTS = ['.jpg', '.jpeg', '.png', ".heic"]
 VIDEO_EXTS = ['.mp4', '.mov', '.mkv', '.avi', ".3gp"]
 
+# Auxiliary Functions.
 
 def get_image_datetime(path: Path):
     """
@@ -34,7 +35,7 @@ def get_image_datetime(path: Path):
         pass
     return out or None
 
-def get_video_creation(path: Path):
+def get_video_datetime(path: Path):
     """
     Extracts creation_time from a video using ffprobe and converts it from UTC to CDMX time (UTC-6).
     Returns the result in the format YYYYMMDD_HHMMSS.
@@ -78,31 +79,25 @@ def is_within_margin(filename_ts: str, metadata_ts: str, max_seconds: int) -> bo
     
     return True
 
-def set_file_modified_time(path: Path, local_ts: str) -> bool:
-    """
-    Sets the file's mtime (and atime) to `local_ts`, interpreted as CDMX time (UTC-6).
-    Returns:
-        True if successful, False otherwise.
-    """
-    # 1) Parse the incoming local timestamp
-    try:
-        dt_local = datetime.strptime(local_ts, "%Y%m%d_%H%M%S")
-    except ValueError:
-        raise ValueError(f"Timestamp {local_ts!r} not in YYYYMMDD_HHMMSS format")
+# Main Functions
 
-    # 2) Attach CDMX timezone (UTC-6) and convert to UTC
-    tz_cdmx = timezone(timedelta(hours=-6))
-    dt_aware = dt_local.replace(tzinfo=tz_cdmx)
-    
-    # 3) Get POSIX timestamp (seconds since epoch)
-    #    .timestamp() on an aware datetime gives the correct UTC-based epoch
-    ts = dt_aware.timestamp()
+def set_file_modification_date(path: Path, local_ts: str) -> bool:
+    """
+    Sets the filesystem modification date (mtime) of a file (video or image)
+    to the timestamp provided in "YYYYMMDD_HHMMSS" format (assumed local time).
 
-    # 4) Apply to both atime and mtime
+    Returns True on success, False on failure.
+    """
     try:
+        # Parse timestamp
+        dt = datetime.strptime(local_ts, "%Y%m%d_%H%M%S")
+        ts = dt.timestamp()  # convert to Unix timestamp
+
+        # Update access and modification times
         os.utime(path, (ts, ts))
         return True
-    except Exception:
+    except Exception as e:
+        print(f"Error setting modification date: {e}")
         return False
 
 def set_video_date(path: Path, local_ts: str) -> bool:
@@ -143,17 +138,16 @@ def set_video_date(path: Path, local_ts: str) -> bool:
     
     # Atomically replaces original
     os.replace(str(tmp_path), str(path))
-    set_file_modified_time(path, local_ts)
+    set_file_modification_date(path, local_ts)
     return True
 
 def set_image_date(path: Path, local_ts: str) -> bool:
     """
     Sets all the important EXIF date tags of an image (CreateDate, DateTimeOriginal, ModifyDate)
     to `local_ts` (CDMX local time).
-    Optionally also updates the file's modification time to match.
 
     Returns:
-        True if ExifTool (and utime, if requested) succeed, False otherwise.
+        True if ExifTool succeed, False otherwise.
     """
     # Parses incoming timestamp
     try:
@@ -164,19 +158,19 @@ def set_image_date(path: Path, local_ts: str) -> bool:
     # Reformats to EXIF’s "YYYY:MM:DD HH:MM:SS"
     exif_ts = dt.strftime("%Y:%m:%d %H:%M:%S")
 
-    # 3) Builds ExifTool command
+    # Builds ExifTool command
     cmd = [
         "exiftool",
         "-overwrite_original",
         f"-AllDates={exif_ts}",
+        "Time-OffsetTimeOriginal=-06:00 -OffsetTimeDigitized=-06:00 -OffsetTime=-06:00" # Offsets UTC to match CDMX time.
+        f"-FileModifyDate={exif_ts}",
+        str(path)
     ]
 
-    # Also sets the file’s modify timestamp.
-    cmd.append(f"-FileModifyDate={exif_ts}")
-    cmd.append(str(path))
-
-    # 4) Runs ExifTool.
+    # Runs ExifTool.
     res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    set_file_modification_date(path, local_ts)
     return res.returncode == 0
 
 def get_args():
@@ -192,11 +186,11 @@ def get_args():
         help="Directory to process."
     )
     parser.add_argument(
-        "-t",
-        "--metadata",
+        "-d",
+        "--date",
         default="name",
         choices=["name", "exif"],
-        help="Metadata to keep (default: name)."
+        help="Date to keep (default: name)."
     )
     parser.add_argument(
         "-f",
@@ -204,6 +198,13 @@ def get_args():
         default="false",
         choices=["true", "false"],
         help="Fix metadata or naming date (default False)."
+    )
+    parser.add_argument(
+        "-o",
+        "--overwrite",
+        default="false",
+        choices=["true", "false"],
+        help="Forces overwriting timestamps, even if there is no discrepancy (default: false)"
     )
 
     args = parser.parse_args()
@@ -213,8 +214,9 @@ def main():
     # Assing ars to variables.
     args = get_args()
     base_dir = Path(args.input)
-    date_to_keep = args.metadata
+    date_to_keep = args.date
     fix = False if args.fix == "false" else True
+    overwrite = False if args.overwrite == "false" else True
 
     # Lists containing unique dates for names and exif, used to avoid overwriting files.
     pathUniqueDates = []
@@ -242,14 +244,13 @@ def main():
 
         # Extracts date from name and metadata in YYYYMMDD_HHMMSS format.
         name_date = item.stem[:15]
-        meta_date = get_image_datetime(item) if item.suffix.lower() in IMAGE_EXTS else get_video_creation(item)
-        margin_in_seconds = 30 # Used to compare both dates.
+        meta_date = get_image_datetime(item) if item.suffix.lower() in IMAGE_EXTS else get_video_datetime(item)
 
         # Checks if there is a mismatch between name and metadata dates.
         try:
-            is_Ok = is_within_margin(name_date, meta_date, max_seconds=margin_in_seconds)
+            not_within_margin = is_within_margin(name_date, meta_date, max_seconds=1)
         except:
-            is_Ok = False
+            not_within_margin = False
 
         # Case 1: No metadata at all => Appends name date.
         if not meta_date:
@@ -266,9 +267,9 @@ def main():
         pathUniqueDates.append(name_date)
 
         # Case 1: Dates differ => Keeps only selected date.
-        if not is_Ok:
-            print(f"{RED}[ERROR]{RESET} Metadata differs.\n-Name: {name_date}\n-Meta: {meta_date}\n")
-            if fix:
+        if not_within_margin or overwrite:
+            print(f"{RED}[ERROR]{RESET} Metadata differs. NAME: {name_date}, EXIF: {meta_date}")
+            if fix or overwrite:
                 print(f"Fixing... {item.name}")
                 if item.suffix.lower() in IMAGE_EXTS:
                     if date_to_keep == "name":
@@ -277,13 +278,12 @@ def main():
                         metaUniqueDates.append(meta_date)
                         set_image_date(item, meta_date)
                     else:
-                        print(f"Ya hay un archivo con el nombre {meta_date}")
+                        print(f"There is a file with the same name: {meta_date}")
                 else:
                     if date_to_keep == "name":
                         set_video_date(item, name_date)
                     elif meta_date not in pathUniqueDates and meta_date not in metaUniqueDates:
                         set_video_date(item, meta_date)
-
 
 if __name__ == '__main__':
     main()
