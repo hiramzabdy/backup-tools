@@ -248,9 +248,9 @@ def main():
 
         # Checks if there is a mismatch between name and metadata dates.
         try:
-            not_within_margin = is_within_margin(name_date, meta_date, max_seconds=1)
+            is_OK = is_within_margin(name_date, meta_date, max_seconds=1)
         except:
-            not_within_margin = False
+            is_OK = False
 
         # Case 1: No metadata at all => Appends name date.
         if not meta_date:
@@ -267,7 +267,7 @@ def main():
         pathUniqueDates.append(name_date)
 
         # Case 1: Dates differ => Keeps only selected date.
-        if not_within_margin or overwrite:
+        if not is_OK or overwrite:
             print(f"{RED}[ERROR]{RESET} Metadata differs. NAME: {name_date}, EXIF: {meta_date}")
             if fix or overwrite:
                 print(f"Fixing... {item.name}")

@@ -83,7 +83,7 @@ def get_frame_rate(path):
         fps_val = 0.0
     return fps_val
 
-def print_scaled_resolution(path):
+def print_scaled_resolution(path, new_res):
     """
     Given a video path, prints its original and downscaled resolutions.
     """
@@ -107,20 +107,60 @@ def print_scaled_resolution(path):
         raise ValueError("Could not parse resolution from ffprobe output.")
 
     # Determine scale factor
+    new_res = int(new_res)
     if width <= height:
-        scale_factor = 1080 / width
+        scale_factor = new_res / width
     else:
-        scale_factor = 1080 / height
+        scale_factor = new_res / height
 
     new_width = int(round(width * scale_factor))
     new_height = int(round(height * scale_factor))
     print(f"[Org res] {width}x{height}")
 
-    if min(width, height) > 1080:
+    if min(width, height) > new_res:
         print(f"[New res] {RED}{new_width}x{new_height}{RESET}")
 
-def get_audio_bitrate(path):
-    pass
+def get_video_audio_info(path: Path):
+    """
+    Returns the audio codec and bitrate (in kbps) of a video file.
+    Returns ("Undefined", 0) if no audio codec found.
+    """
+    try:
+        # ffprobe command to extract codec name and bitrate from the audio stream
+        cmd = [
+            "ffprobe",
+            "-v", "error",
+            "-select_streams", "a:0",
+            "-show_entries", "stream=codec_name,bit_rate",
+            "-of", "default=noprint_wrappers=1:nokey=0",
+            str(path)
+        ]
+        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+        if res.returncode != 0 or not res.stdout.strip():
+            return ("Undefined", 0)
+
+        codec_name = None
+        bitrate = None
+
+        for line in res.stdout.splitlines():
+            if line.startswith("codec_name="):
+                codec_name = line.split("=", 1)[1].strip()
+            elif line.startswith("bit_rate="):
+                try:
+                    bitrate = int(line.split("=", 1)[1].strip())
+                    bitrate = int(bitrate/1000)
+                except ValueError:
+                    bitrate = None
+
+        return (codec_name, bitrate)
+
+    except FileNotFoundError:
+        print("Error: ffprobe not found. Please install FFmpeg.")
+        return None
+    except Exception as e:
+        print(f"Error reading audio info: {e}")
+        return None
 
 # Main Functions
 
@@ -128,26 +168,45 @@ def encode_video(vid, out_file, library, crf, preset, downscale):
     duration = get_duration(vid)
     total_mmss = seconds_to_mmss(duration)
     input_fps = get_frame_rate(vid)
+    orig_audio_props = get_video_audio_info(vid)
 
     # Builds ffmpeg command.
     cmd = ['ffmpeg', '-i', str(vid), '-c:v', str(library), '-crf', str(crf), '-preset', str(preset)]
 
-    # Downscales to 1080p 8 bits
+    # Downscales to resolution if set.
     if downscale:
-        vf = "scale='min(1080,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease,format=yuv420p"
+        vf = f"scale='min({downscale},iw)':'min({downscale},ih)':force_original_aspect_ratio=decrease,format=yuv420p"
         cmd += ["-vf", vf]
-        print_scaled_resolution(vid)
+        print_scaled_resolution(vid, downscale)
 
-    # Caps FPS at 240 since going above usually results in encoding error.
+    # Caps FPS range, since going above 240 or below 20 usually results in encoding error.
     if input_fps > 239:
         cmd += ['-r', str(240)]
+    elif input_fps < 20:
+        cmd += ['-r', str(24)]
 
-    # Downsamples audio to 128kbps opus
-    if downscale:
-        cmd += ["-c:a", "libopus", "-b:a", "64k"] # Might be 64k, 96k or 128k
-    else:
-        cmd += ["-c:a", "copy"]
+    # Used to determine audio stream bitrate.
+    orig_bitrate = orig_audio_props[1]
 
+    # Caps max audio bitrate to 256kbps aac for H264 and H265.
+    if library == "libx264" or library == "libx265":
+        if orig_bitrate == 0:
+            cmd += ["-c:a", "copy"] # In case audio exists but script wasn't able to detect it.
+        elif orig_bitrate <= 256:
+            out_bitrate = str(orig_bitrate) + "k"
+            cmd += ["-c:a", "libfdk_aac", "-b:a", out_bitrate]
+        elif orig_bitrate > 256:
+            cmd += ["-c:a", "libfdk_aac", "-b:a", "256k"]
+    
+    # Caps max audio bitrate to 128kbps opus for AV1.
+    if library == "libsvtav1":
+        if orig_bitrate <= 128:
+            out_bitrate = str(orig_bitrate) + "k"
+            cmd += ["-c:a", "libopus", "-b:a", out_bitrate]
+        else:
+            cmd += ["-c:a", "libopus", "-b:a", "128k"]
+
+    # Copies metadata and completes command.
     cmd += ['-map_metadata', '0',
             '-y', '-progress', 'pipe:1', str(out_file)]
 
@@ -236,20 +295,12 @@ def get_args():
         help="Codec efficiency level (Codec dependant) (default: 4)"
     )
     parser.add_argument(
-        "-e",
-        "--extension",
-        choices=[".mp4", ".mkv"],
-        default=".mkv",
-        help="Extension to use (default: .mkv)"
-    )
-    parser.add_argument(
         "-d",
         "--downscale",
-        choices=["yes", "no"],
+        choices=["480", "720", "1080", "1440", "2160", "no"],
         default="no",
-        help="Downscale to 1080p (default: no)"
+        help="Downscale to specific resolution (default: no)"
     )
-
     args = parser.parse_args()
     return args
 
@@ -259,8 +310,8 @@ def main():
     library = args.library
     crf = args.crf
     preset = args.preset
-    extension = args.extension
-    downscale = True if args.downscale == "yes" else False
+    extension = ".mkv" if library == "libsvtav1" else ".mp4"
+    downscale = False if args.downscale == "no" else args.downscale
 
     if not base_dir.is_dir():
         print("Directory does not exist")
