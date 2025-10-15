@@ -26,7 +26,7 @@ For Storage Savings (Somewhat noticeable difference):
 For EXTREME Storage Savings (Noticeable difference, still not radio-like photos):
 --quality 40 --preset 2 --megapixels 12
 
-1. Running multiple instances of the script with the same params(running on the same output directory)
+1. Running multiple instances of the script with the same params (running on the same output directory)
 might result in encoding errors.
 """
 
@@ -36,9 +36,8 @@ def resize_image(path: Path, megapixels: str) -> str:
     Returns the path of the resized temp image.
     """
     with Image.open(path) as img:
-        # Parses megapixels as int for calculations, and path to str.
+        # Parses megapixels as int for calculations.
         megapixels = int(megapixels)
-        path = str(path)
 
         # Converts target megapixels to pixels.
         target_pixels = megapixels * 1_000_000
@@ -66,7 +65,7 @@ def resize_image(path: Path, megapixels: str) -> str:
 
         # Saves downscaled img to temp file, then returns it.
         resized = img.resize((new_w, new_h), Image.LANCZOS)
-        tmp_path = path + ".resized.png"
+        tmp_path = path.stem + "_" + str(new_megapixels)[:3] + "MP.png"
         resized.save(tmp_path, format="PNG")
         return tmp_path
 
