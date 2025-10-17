@@ -5,15 +5,15 @@ import argparse
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 
-# ANSI color codes
+# ANSI color codes.
 GREEN = '\033[92m'
 YELLOW = '\033[93m'
 RED = '\033[91m'
 RESET = '\033[0m'
 
-# Extensiones a procesar
-IMAGE_EXTS = ['.jpg', '.jpeg', '.png', ".heic"]
-VIDEO_EXTS = ['.mp4', '.mov', '.mkv', '.avi', ".3gp"]
+# Extensions to process.
+IMAGE_EXTS = [".jpg", ".jpeg", ".heic", ".heif", ".webp", ".avif"]
+VIDEO_EXTS = [".mp4", ".mov", ".mkv", ".avi", ".3gp"]
 
 # Auxiliary Functions.
 
@@ -75,9 +75,9 @@ def is_within_margin(filename_ts: str, metadata_ts: str, max_seconds: int) -> bo
     
     # Checks if longer than margin.
     if delta > timedelta(seconds=max_seconds):
-        return False
+        return (False, delta)
     
-    return True
+    return (True, delta)
 
 # Main Functions
 
@@ -189,7 +189,7 @@ def get_args():
         "-d",
         "--date",
         default="name",
-        choices=["name", "exif"],
+        choices=["name", "meta"],
         help="Date to keep (default: name)."
     )
     parser.add_argument(
@@ -248,9 +248,9 @@ def main():
 
         # Checks if there is a mismatch between name and metadata dates.
         try:
-            is_OK = is_within_margin(name_date, meta_date, max_seconds=1)
+            is_OK = is_within_margin(name_date, meta_date, max_seconds=10)
         except:
-            is_OK = False
+            is_OK = (False, 0)
 
         # Case 1: No metadata at all => Appends name date.
         if not meta_date:
@@ -267,8 +267,8 @@ def main():
         pathUniqueDates.append(name_date)
 
         # Case 1: Dates differ => Keeps only selected date.
-        if not is_OK or overwrite:
-            print(f"{RED}[ERROR]{RESET} Metadata differs. NAME: {name_date}, EXIF: {meta_date}")
+        if not is_OK[0] or overwrite:
+            print(f"{RED}[ERROR]{RESET} Metadata differs. NAME: {name_date}, META: {meta_date}. Diff => {is_OK[1]} [{item.suffix}]")
             if fix or overwrite:
                 print(f"Fixing... {item.name}")
                 if item.suffix.lower() in IMAGE_EXTS:

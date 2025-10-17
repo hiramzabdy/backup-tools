@@ -13,7 +13,7 @@ YELLOW = '\033[93m'
 RESET = '\033[0m'
 
 # Extensions.
-IMAGE_EXTS = ['.jpg', '.jpeg', '.heic', ".heif", ".webp", ".avif"] # Avoided .png as it can affect script dowscaling.
+IMAGE_EXTS = [".jpg", ".jpeg", ".heic", ".heif", ".webp", ".avif"] # Avoided .png as it can affect script dowscaling.
 
 # Notes:
 """
@@ -24,11 +24,13 @@ For Storage Savings (Somewhat noticeable difference):
 --quality 32 --preset 2 --megapixels 20
 
 For EXTREME Storage Savings (Noticeable difference, still not radio-like photos):
---quality 40 --preset 2 --megapixels 12
+--quality 40 --preset 1 --megapixels 12
 
 1. Running multiple instances of the script with the same params (running on the same output directory)
 might result in encoding errors.
 """
+
+# Auxiliary Functions.
 
 def resize_image(path: Path, megapixels: str) -> str:
     """
@@ -68,6 +70,8 @@ def resize_image(path: Path, megapixels: str) -> str:
         tmp_path = path.stem + "_" + str(new_megapixels)[:3] + "MP.png"
         resized.save(tmp_path, format="PNG")
         return tmp_path
+
+# Main Functions.
 
 def process_image(path: Path, out_file: Path, megapixels: str, quality: str, preset: str):
     """
@@ -143,10 +147,10 @@ def get_args():
         help="Compression efficiency level (default: 2)."
     )
     parser.add_argument(
-        "-x",
-        "--megapixels",
-        default="48",
-        help="Maximun size in MegaPixels per image (default: 48)."
+        "-d",
+        "--downscale",
+        default="200",
+        help="Downscale to x megapixels (default: 200)."
     )
 
     args = parser.parse_args()

@@ -116,7 +116,7 @@ def get_args():
         help="Secondary directory, quality checks"
     )
     parser.add_argument(
-        "-t",
+        "-m",
         "--mode",
         choices=["psnr", "ssim", "vmaf"],
         default="ssim",
@@ -127,47 +127,56 @@ def get_args():
     return args
 
 def main():
+    # Assigns args to variables.
     args = get_args()
     base_dir = Path(args.base)
     secondary_dir = Path(args.secondary)
     mode = args.mode
 
+    # Checks that both directories exist.
     if not base_dir.is_dir() or not secondary_dir.is_dir():
         print(f"One of the directories doesn't exist")
         sys.exit(1)
 
+    # List with each result, used to calculate average result.
     all_results = []
-    videos = [f for f in base_dir.iterdir() if f.suffix.lower() in VIDEO_EXTS and f.is_file()]
+
+    # Gets all videos in secondary directory, sorts and counts them.
+    videos = [f for f in secondary_dir.iterdir() if f.suffix.lower() in VIDEO_EXTS and f.is_file()]
     videos = sorted(videos)
     total = len(videos)
 
-    # Iterates base videos
-    for idx, orig in enumerate(videos, start=1):
-        if not orig.is_file():
-            continue
-        stem = orig.stem
+    # Iterates base videos.
+    for idx, vid in enumerate(videos, start=1):
         # Finds matching in secondary directory
-        print(f"[{idx}/{total}] Processing: {orig.name}")
-        matches = [f for f in secondary_dir.iterdir() if f.is_file() and f.stem.startswith(stem)]
-        if not matches:
-            print(f'{orig.name}: No video equivalent found in second directory: {secondary_dir.name}')
-            continue
-        comp = sorted(matches)[0]
-        br1 = get_bitrate_mbps(orig)
-        br2 = get_bitrate_mbps(comp)
+        print(f"[{idx}/{total}] Processing: {vid.name}")
+        matches = [f for f in base_dir.iterdir() if f.is_file() and f.stem.startswith(vid.stem)]
 
+        # No matches => Continues to next video.
+        if not matches:
+            print(f'{vid.name}: No video equivalent found in base directory: {base_dir.name}')
+            continue
+
+        # Gets original video with same stem.
+        orig_video = sorted(matches)[0]
+
+        # Original and compressed video bitrates.
+        br1 = get_bitrate_mbps(orig_video)
+        br2 = get_bitrate_mbps(vid)
+
+        # Runs test input in the arguments.
         if mode == "psnr":
-            psnr = get_psnr(orig, comp)
+            psnr = get_psnr(orig_video, vid)
             all_results.append(psnr)
-            result = (f"{orig.name}: {br1:.2f} Mbps => {br2:.2f} Mbps, {GREEN}PSNR: {psnr:.2f} dB{RESET}")
+            result = (f"{orig_video.name}: {br1:.2f} Mbps => {br2:.2f} Mbps, {GREEN}PSNR: {psnr:.2f} dB{RESET}")
         elif mode == "ssim":
-            ssim = get_ssim(orig, comp)
+            ssim = get_ssim(orig_video, vid)
             all_results.append(ssim)
-            result = (f"{orig.name}: {br1:.2f} Mbps => {br2:.2f} Mbps, {GREEN}SSIM: {ssim:.4f}{RESET}")
+            result = (f"{orig_video.name}: {br1:.2f} Mbps => {br2:.2f} Mbps, {GREEN}SSIM: {ssim:.4f}{RESET}")
         else:
-            vmaf = get_vmaf(orig, comp)
+            vmaf = get_vmaf(orig_video, vid)
             all_results.append(vmaf)
-            result = (f"{orig.name}: {br1:.2f} Mbps => {br2:.2f} Mbps, {GREEN}VMAF: {vmaf:.4f}{RESET}")
+            result = (f"{orig_video.name}: {br1:.2f} Mbps => {br2:.2f} Mbps, {GREEN}VMAF: {vmaf:.4f}{RESET}")
 
         print(f"Result: {result}")
     
@@ -175,7 +184,6 @@ def main():
     decimals = 2 if mode == "psnr" else 4
     average_result = round(average_result, decimals)
     print(f"Average {mode}: {average_result}.")
-
 
 if __name__ == '__main__':
     main()

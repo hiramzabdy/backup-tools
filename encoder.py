@@ -3,16 +3,16 @@ import subprocess
 import argparse
 from pathlib import Path
 
-# ANSI color codes
+# ANSI color codes.
 GREEN = '\033[92m'
 RED = '\033[91m'
 YELLOW = '\033[93m'
 RESET = '\033[0m'
 
-# Extensions
-VIDEO_EXTS = ['.mp4', '.mov', '.mkv', '.avi', ".3gp"]
+# Extensions.
+VIDEO_EXTS = [".mp4", ".mkv", ".mov", ".avi", ".3gp"]
 
-# Recomended values
+# Recomended values.
 """
 For Original Quality (Pretty much unnoticeable compression):
 --library libx265 --crf 18 --preset slow
@@ -22,17 +22,18 @@ For Storage Savings (Somewhat noticable difference, not thoroughly tested):
 --library libsvtav1 --crf 36, --preset 2
 
 For EXTREME Storage Savings (Noticable difference, still not potato-like videos):
---library libsvtav1 --crf 48 --preset 2 --downscale yes
+--library libsvtav1 --crf 44 --preset 1 --downscale 1080
+
 This option turned a 350GB smartphones videos backup into a lite 9.3GB backup (2.6% of the original size).
 
 1. For libx265 (hevc), going past slow (i.e. slower, veryslow) doesn't always increase compression efficiency.
 2. Newer versions of libsvtav1 are way faster to encode and provide better efficiency.
-I tested this script using libsvt-av1 3.0.2. If your libsvt-av1 is in the 1.x.x version, I'd recommend
-manually compiling ffmpeg with a newer libsvt-av1 version.
+I tested this script using libsvtav1 3.x.x. If your libsvtav1 is in the 1.x.x version, I'd recommend
+manually compiling ffmpeg with a newer libsvtav1 version.
 3. I'll include more references here once I test each encoder more thoroughly.
 """
 
-# Auxiliary Functions
+# Auxiliary Functions.
 
 def get_duration(path):
     """
@@ -72,7 +73,7 @@ def get_frame_rate(path):
     ]
     result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     fr = result.stdout.strip()
-    # Either '239737/1000', '240/1' or 'N/A'
+    # Either '239737/1000', '240/1' or 'N/A'.
     try:
         if '/' in fr:
             num, den = fr.split('/')
@@ -87,7 +88,7 @@ def print_scaled_resolution(path, new_res):
     """
     Given a video path, prints its original and downscaled resolutions.
     """
-    # Run ffprobe to get width and height
+    # Run ffprobe to get width and height.
     cmd = [
         'ffprobe',
         '-v', 'error',
@@ -106,7 +107,7 @@ def print_scaled_resolution(path, new_res):
     except ValueError:
         raise ValueError("Could not parse resolution from ffprobe output.")
 
-    # Determine scale factor
+    # Determine scale factor.
     new_res = int(new_res)
     if width <= height:
         scale_factor = new_res / width
@@ -126,7 +127,7 @@ def get_video_audio_info(path: Path):
     Returns ("Undefined", 0) if no audio codec found.
     """
     try:
-        # ffprobe command to extract codec name and bitrate from the audio stream
+        # ffprobe command to extract codec name and bitrate from the audio stream.
         cmd = [
             "ffprobe",
             "-v", "error",
@@ -162,7 +163,7 @@ def get_video_audio_info(path: Path):
         print(f"Error reading audio info: {e}")
         return None
 
-# Main Functions
+# Main Functions.
 
 def encode_video(vid, out_file, library, crf, preset, downscale):
     duration = get_duration(vid)
@@ -179,10 +180,10 @@ def encode_video(vid, out_file, library, crf, preset, downscale):
         cmd += ["-vf", vf]
         print_scaled_resolution(vid, downscale)
 
-    # Caps FPS range, since going above 240 or below 20 usually results in encoding error.
+    # Caps FPS range, since going above 240 or below 24 usually results in encoding error.
     if input_fps > 239:
         cmd += ['-r', str(240)]
-    elif input_fps < 20:
+    elif input_fps < 24:
         cmd += ['-r', str(24)]
 
     # Used to determine audio stream bitrate.
@@ -198,13 +199,13 @@ def encode_video(vid, out_file, library, crf, preset, downscale):
         elif orig_bitrate > 256:
             cmd += ["-c:a", "libfdk_aac", "-b:a", "256k"]
     
-    # Caps max audio bitrate to 128kbps opus for AV1.
+    # Caps max audio bitrate to 128kbps or 64kbps opus for AV1.
     if library == "libsvtav1":
-        if orig_bitrate <= 128:
+        if orig_bitrate <= 64:
             out_bitrate = str(orig_bitrate) + "k"
             cmd += ["-c:a", "libopus", "-b:a", out_bitrate]
         else:
-            cmd += ["-c:a", "libopus", "-b:a", "128k"]
+            cmd += ["-c:a", "libopus", "-b:a", "64k"]
 
     # Copies metadata and completes command.
     cmd += ['-map_metadata', '0',
@@ -297,41 +298,47 @@ def get_args():
     parser.add_argument(
         "-d",
         "--downscale",
-        choices=["480", "720", "1080", "1440", "2160", "no"],
-        default="no",
-        help="Downscale to specific resolution (default: no)"
+        choices=["480", "720", "1080", "1440", "2160", "false"],
+        default="false",
+        help="Downscale to specific resolution (default: false)"
     )
     args = parser.parse_args()
     return args
 
 def main():
+    # Assigns args to variables.
     args = get_args()
     base_dir = Path(args.input)
     library = args.library
     crf = args.crf
     preset = args.preset
     extension = ".mkv" if library == "libsvtav1" else ".mp4"
-    downscale = False if args.downscale == "no" else args.downscale
+    downscale = False if args.downscale == "false" else args.downscale
 
+    # Checks if input directory exists.
     if not base_dir.is_dir():
         print("Directory does not exist")
         sys.exit(1)
-        
+    
+    # Creates output folder with arguments data.
     output_dir = base_dir / (library + "-" + crf + "-" + preset)
     output_dir.mkdir(exist_ok=True)
 
+    # Selects all videos in input directory, sorts them and counts them.
     videos = [f for f in base_dir.iterdir() if f.suffix.lower() in VIDEO_EXTS and f.is_file()]
     videos = sorted(videos)
     total = len(videos)
 
+    # Returns if there are no videos.
     if total == 0:
         print("No videos were found")
         return
 
+    # Iterates each video.
     for idx, vid in enumerate(videos, start=1):
         print(f"[{idx}/{total}] Processing: {vid.name}")
 
-        out_file = output_dir / (vid.stem + extension)
+        out_file = output_dir / (vid.stem + extension) # Output video name.
         if out_file.exists():
             print(f"{YELLOW}[Skipping]{RESET}")
             continue
