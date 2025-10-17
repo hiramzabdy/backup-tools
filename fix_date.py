@@ -197,7 +197,7 @@ def get_args():
         "--fix",
         default="false",
         choices=["true", "false"],
-        help="Fix metadata or naming date (default False)."
+        help="Fix metadata or naming date (default false)."
     )
     parser.add_argument(
         "-o",

@@ -4,7 +4,7 @@ import math
 import subprocess
 import argparse
 from pathlib import Path
-from PIL import Image
+from PIL import Image, ImageOps
 
 # ANSI color codes.
 GREEN = '\033[92m'
@@ -13,8 +13,7 @@ YELLOW = '\033[93m'
 RESET = '\033[0m'
 
 # Extensions.
-IMAGE_EXTS = [".jpg", ".jpeg", ".heic", ".heif", ".webp", ".avif"] # Avoided .png as it can affect script dowscaling.
-
+IMAGE_EXTS = [".jpg", ".jpeg", ".heic", ".heif", ".webp", ".avif", ".png"]
 # Notes:
 """
 For Orignal Quality (Pretty much unnoticeable compression):
@@ -37,39 +36,46 @@ def resize_image(path: Path, megapixels: str) -> str:
     Resizes an image to fit within the given megapixel count, preserving aspect ratio.
     Returns the path of the resized temp image.
     """
-    with Image.open(path) as img:
-        # Parses megapixels as int for calculations.
-        megapixels = int(megapixels)
+    try:
+        with Image.open(path) as img:
 
-        # Converts target megapixels to pixels.
-        target_pixels = megapixels * 1_000_000
+            # Fixes orientation.
+            img = ImageOps.exif_transpose(img)
 
-        # Gets original size (w, h, pixels).
-        w, h = img.size
-        pixels = (int(w) * int(h))
+            # Parses megapixels as int for calculations.
+            megapixels = int(megapixels)
 
-        # Prints original resolution.
-        megapixels = pixels / 1_000_000
-        print(f"[Org Res] {w}x{h} [{megapixels:.1f}MP]")
+            # Converts target megapixels to pixels.
+            target_pixels = megapixels * 1_000_000
 
-        # Returns if no need for resizing.
-        if pixels <= target_pixels:
-            return path
+            # Gets original size (w, h, pixels).
+            w, h = img.size
+            pixels = (int(w) * int(h))
 
-        # Scales width and heigth to match target MP.
-        scale = math.sqrt(target_pixels / pixels)
-        new_w = int(w * scale)
-        new_h = int(h * scale)
+            # Prints original resolution.
+            megapixels = pixels / 1_000_000
+            print(f"[Org Res] {w}x{h} [{megapixels:.1f}MP]")
 
-        # Prints new resolution.
-        new_megapixels = (new_w * new_h) / 1_000_000
-        print(f"[New Res] {RED}{new_w}x{new_h}{RESET}, [{new_megapixels:.1f}MP]")
+            # Returns if no need for resizing.
+            if pixels <= target_pixels:
+                return path
 
-        # Saves downscaled img to temp file, then returns it.
-        resized = img.resize((new_w, new_h), Image.LANCZOS)
-        tmp_path = path.stem + "_" + str(new_megapixels)[:3] + "MP.png"
-        resized.save(tmp_path, format="PNG")
-        return tmp_path
+            # Scales width and heigth to match target MP.
+            scale = math.sqrt(target_pixels / pixels)
+            new_w = int(w * scale)
+            new_h = int(h * scale)
+
+            # Prints new resolution.
+            new_megapixels = (new_w * new_h) / 1_000_000
+            print(f"[New Res] {RED}{new_w}x{new_h}{RESET}, [{new_megapixels:.1f}MP]")
+
+            # Saves downscaled img to temp file, then returns it.
+            resized = img.resize((new_w, new_h), Image.LANCZOS)
+            tmp_path = path.stem + "_" + str(new_megapixels)[:3] + "MP.png"
+            resized.save(tmp_path, format="PNG")
+            return tmp_path
+    except:
+        return False
 
 # Main Functions.
 
@@ -160,7 +166,7 @@ def main():
     # Assigns args to variables.
     args = get_args()
     base_dir = Path(args.input)
-    megapixels = args.megapixels
+    megapixels = args.downscale
     quality = args.quality
     preset = args.preset
 
