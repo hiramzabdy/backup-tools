@@ -158,14 +158,15 @@ def get_video_audio_info(path: Path):
 
     except FileNotFoundError:
         print("Error: ffprobe not found. Please install FFmpeg.")
-        return None
+        return ("Undefined", 0)
     except Exception as e:
         print(f"Error reading audio info: {e}")
-        return None
+        return ("Undefined", 0)
 
 # Main Functions.
 
 def encode_video(vid, out_file, library, crf, preset, downscale):
+    # Assigns args to variables.
     duration = get_duration(vid)
     total_mmss = seconds_to_mmss(duration)
     input_fps = get_frame_rate(vid)
@@ -319,10 +320,6 @@ def main():
     if not base_dir.is_dir():
         print("Directory does not exist")
         sys.exit(1)
-    
-    # Creates output folder with arguments data.
-    output_dir = base_dir / (library + "-" + crf + "-" + preset)
-    output_dir.mkdir(exist_ok=True)
 
     # Selects all videos in input directory, sorts them and counts them.
     videos = [f for f in base_dir.iterdir() if f.suffix.lower() in VIDEO_EXTS and f.is_file()]
@@ -333,12 +330,18 @@ def main():
     if total == 0:
         print("No videos were found")
         return
+    
+    # Creates output folder with arguments data.
+    output_dir = base_dir / (library + "-" + crf + "-" + preset)
+    output_dir.mkdir(exist_ok=True)
 
     # Iterates each video.
     for idx, vid in enumerate(videos, start=1):
         print(f"[{idx}/{total}] Processing: {vid.name}")
 
         out_file = output_dir / (vid.stem + extension) # Output video name.
+
+        # Skips if video already exists.
         if out_file.exists():
             print(f"{YELLOW}[Skipping]{RESET}")
             continue

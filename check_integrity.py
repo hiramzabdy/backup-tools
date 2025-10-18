@@ -132,13 +132,13 @@ def main():
     coded_videos = sorted([f for f in secondary_dir.iterdir() if f.is_file()])    
     total = len(coded_videos)
 
-    # List with videos that don't pass the test, used to delete them.
-    vids_To_Delete = []
-
     # Returns if no videos were found.
     if total == 0:
         print("No videos were found in " + secondary_dir + ".")
         return
+    
+    # List with videos that don't pass the test, used to delete them.
+    vids_To_Delete = []
 
     # Iterates each video.
     for idx, vid in enumerate(coded_videos, start=1):

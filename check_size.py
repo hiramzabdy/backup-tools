@@ -126,7 +126,7 @@ def main():
 
         # Formats output
         print(
-            f"[{idx}/{total}] - {orig_stem} - {mb_orig:.1f} MB => {mb_sec:.1f} MB, Δ {format_signed(diff_mb, ' MB')} ({format_signed(pct, '%')}), {status}"
+            f"[{idx}/{total}]\n{status} - {orig_stem} - {mb_orig:.1f} MB => {mb_sec:.1f} MB, Δ {format_signed(diff_mb, ' MB')} ({format_signed(pct, '%')})"
         )
 
         # Adds up the size of all videos so far.

@@ -138,13 +138,18 @@ def main():
         print(f"One of the directories doesn't exist")
         sys.exit(1)
 
-    # List with each result, used to calculate average result.
-    all_results = []
-
     # Gets all videos in secondary directory, sorts and counts them.
     videos = [f for f in secondary_dir.iterdir() if f.suffix.lower() in VIDEO_EXTS and f.is_file()]
     videos = sorted(videos)
     total = len(videos)
+
+    # Returns if no videos were found.
+    if total == 0:
+        print("No videos were found in " + secondary_dir + ".")
+        return
+
+    # List with each result, used to calculate average result.
+    all_results = []
 
     # Iterates base videos.
     for idx, vid in enumerate(videos, start=1):
@@ -164,7 +169,7 @@ def main():
         br1 = get_bitrate_mbps(orig_video)
         br2 = get_bitrate_mbps(vid)
 
-        # Runs test input in the arguments.
+        # Runs test type input in the arguments.
         if mode == "psnr":
             psnr = get_psnr(orig_video, vid)
             all_results.append(psnr)

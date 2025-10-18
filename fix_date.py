@@ -217,6 +217,7 @@ def main():
     date_to_keep = args.date
     fix = False if args.fix == "false" else True
     overwrite = False if args.overwrite == "false" else True
+    max_seconds = 10 # Max discrepancy allowed in seconds.
 
     # Lists containing unique dates for names and exif, used to avoid overwriting files.
     pathUniqueDates = []
@@ -248,12 +249,12 @@ def main():
 
         # Checks if there is a mismatch between name and metadata dates.
         try:
-            is_OK = is_within_margin(name_date, meta_date, max_seconds=10)
+            is_OK = is_within_margin(name_date, meta_date, max_seconds)
         except:
             is_OK = (False, 0)
 
         # Case 1: No metadata at all => Appends name date.
-        if not meta_date:
+        if not meta_date or overwrite:
             print(f"{YELLOW}[WARN]{RESET} No metadata was found")
             if fix:
                 print(f"Fixing... {item} => {name_date}")
@@ -271,14 +272,16 @@ def main():
             print(f"{RED}[ERROR]{RESET} Metadata differs. NAME: {name_date}, META: {meta_date}. Diff => {is_OK[1]} [{item.suffix}]")
             if fix or overwrite:
                 print(f"Fixing... {item.name}")
+                # Image fix.
                 if item.suffix.lower() in IMAGE_EXTS:
                     if date_to_keep == "name":
-                        set_image_date(item, name_date)
-                    elif meta_date not in pathUniqueDates and meta_date not in metaUniqueDates:
-                        metaUniqueDates.append(meta_date)
-                        set_image_date(item, meta_date)
+                        set_image_date(item, name_date) # Appends date in name.
+                    elif meta_date not in pathUniqueDates and meta_date not in metaUniqueDates: # Avoid overwriting any files.
+                        metaUniqueDates.append(meta_date) # Appends name to list with names already in use.
+                        set_image_date(item, meta_date) # Renames file with date in metadata.
                     else:
                         print(f"There is a file with the same name: {meta_date}")
+                # Video fix.
                 else:
                     if date_to_keep == "name":
                         set_video_date(item, name_date)

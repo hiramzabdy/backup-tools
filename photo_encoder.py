@@ -14,6 +14,7 @@ RESET = '\033[0m'
 
 # Extensions.
 IMAGE_EXTS = [".jpg", ".jpeg", ".heic", ".heif", ".webp", ".avif", ".png"]
+
 # Notes:
 """
 For Orignal Quality (Pretty much unnoticeable compression):
@@ -76,7 +77,7 @@ def resize_image(path: Path, megapixels: str) -> str:
             return tmp_path
     # If process fails, returns path to the original image, no downscaling.
     except (IOError, OSError) as e:
-        print(f"{RED}[ERROR]{RESET} Could not downscale image: {e}")
+        print(f"{YELLOW}[WARN]{RESET} Could not downscale image: {e}")
         return str(path)
 
 def run_command(cmd: list) -> bool:
