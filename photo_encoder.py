@@ -39,8 +39,8 @@ def resize_image(path: Path, megapixels: str) -> str:
     try:
         with Image.open(path) as img:
 
-            # Fixes orientation.
-            img = ImageOps.exif_transpose(img)
+            # Stores metadata.
+            exif = img.info.get("exif")
 
             # Parses megapixels as int for calculations.
             megapixels = int(megapixels)
@@ -67,15 +67,17 @@ def resize_image(path: Path, megapixels: str) -> str:
 
             # Prints new resolution.
             new_megapixels = (new_w * new_h) / 1_000_000
-            print(f"[New Res] {RED}{new_w}x{new_h}{RESET}, [{new_megapixels:.1f}MP]")
+            print(f"[New Res] {RED}{new_w}x{new_h}{RESET} [{new_megapixels:.1f}MP]")
 
             # Saves downscaled img to temp file, then returns it.
             resized = img.resize((new_w, new_h), Image.LANCZOS)
-            tmp_path = path.stem + "_" + str(new_megapixels)[:3] + "MP.png"
-            resized.save(tmp_path, format="PNG")
+            tmp_path = path.stem + "_" + str(new_megapixels)[:3] + "MP_temp.jpg"
+            resized.save(tmp_path, format="JPEG", quality=100, subsampling=0, exif=exif)
             return tmp_path
-    except:
-        return False
+    # If process fails, returns path to the original image, no downscaling.
+    except (IOError, OSError) as e:
+        print(f"{RED}[ERROR]{RESET} Could not downscale image: {e}")
+        return str(path)
 
 # Main Functions.
 
@@ -85,24 +87,24 @@ def process_image(path: Path, out_file: Path, megapixels: str, quality: str, pre
     Args:
         path (Path or str): Input image path.
         out_file (Path or str): Output file path (e.g. picture.avif).
-        megapixels (int): Target megapixel cap (e.g. 12).
-        quality (int): AVIF quantizer (lower = higher quality).
-        preset (int): AVIF speed preset (0 = slowest, best compression).
+        megapixels (str): Target megapixel cap (e.g. 12).
+        quality (str): AVIF quantizer (lower = higher quality).
+        preset (str): AVIF speed preset (1 = slowest, best compression).
     """
 
     # Returns if output file exists.
     if out_file.exists():
-        print(f"{YELLOW}[Skipping]{RESET}")
+        print(f"{YELLOW}[Skipping]{RESET} Output file exists.")
         return
 
     # Creates temp img for resizing to max megapixels if needed.
     tmp = resize_image(path, megapixels)
 
-    # Builds ffmpeg command.
+    # Builds ffmpeg command to encode image.
     cmd = [
         "ffmpeg", "-y",
         "-i", str(tmp),
-        "-map_metadata", "0",             # Copy metadata.
+        "-map", "0",                      # Copy metadata.
         "-frames:v", "1",                 # Single frame (treat as image).
         "-c:v", "libsvtav1",              # AV1 encoder.
         "-crf", str(quality),             # Quality.
@@ -110,6 +112,9 @@ def process_image(path: Path, out_file: Path, megapixels: str, quality: str, pre
         "-pix_fmt", "yuv420p",            # yuv420p 8bits depth.
         str(out_file)
     ]
+
+    encode_OK = False
+    metadata_OK = False
 
     # Runs ffmpeg command.
     try:
@@ -119,11 +124,38 @@ def process_image(path: Path, out_file: Path, megapixels: str, quality: str, pre
             stdout=subprocess.DEVNULL,    # Silence stdout.
             stderr=subprocess.PIPE        # Capture stderr.
         )
-        print(f"{GREEN}[OK]{RESET}")      # Success.
+        encode_OK = True
     except subprocess.CalledProcessError as e: # Handles error.
         print(f"{RED}[ERROR]{RESET} during ffmpeg execution:")
         print(e.stderr.decode())
 
+    # Builds exiftool command to extract metadata
+    exiftool_cmd = [
+        "exiftool",
+        "-tagsFromFile", str(tmp),
+        "-overwrite_original",  # Suppresses creation of a backup file
+        str(out_file)
+    ]
+
+    # Copies image metadata using exiftool.
+    try:
+        subprocess.run(
+            exiftool_cmd,
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE
+        )
+        metadata_OK = True
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        if isinstance(e, FileNotFoundError):
+            print(f"{YELLOW}[WARNING]{RESET} 'exiftool' not found. Metadata not copied.")
+        else:
+            print(f"{YELLOW}[WARNING]{RESET} exiftool failed. Metadata may be incomplete.")
+            print(e.stderr.decode())
+
+
+    msg = f"{GREEN}[OK]{RESET}" if encode_OK and metadata_OK else "{YELLOW}[WARN]{RESET} One step failed"
+    print(msg)
     # cleanup temp resize file if it was created.
     if str(tmp) != str(path) and os.path.exists(tmp):
         os.remove(tmp)
