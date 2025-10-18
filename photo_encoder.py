@@ -79,17 +79,24 @@ def resize_image(path: Path, megapixels: str) -> str:
         print(f"{RED}[ERROR]{RESET} Could not downscale image: {e}")
         return str(path)
 
+def run_command(cmd: list) -> bool:
+    try:
+        subprocess.run(
+            cmd,
+            check=True,
+            stdout=subprocess.DEVNULL,    # Silence stdout.
+            stderr=subprocess.PIPE        # Capture stderr.
+        )
+        return True
+    except subprocess.CalledProcessError as e: # Handles error.
+        print(e.stderr.decode())
+        return False
+
 # Main Functions.
 
 def process_image(path: Path, out_file: Path, megapixels: str, quality: str, preset: str):
     """
-    Resize and encode a single image into AVIF format using libsvtav1.
-    Args:
-        path (Path or str): Input image path.
-        out_file (Path or str): Output file path (e.g. picture.avif).
-        megapixels (str): Target megapixel cap (e.g. 12).
-        quality (str): AVIF quantizer (lower = higher quality).
-        preset (str): AVIF speed preset (1 = slowest, best compression).
+    Resizes and encodes a single image into AVIF format using libsvtav1.
     """
 
     # Returns if output file exists.
@@ -101,7 +108,7 @@ def process_image(path: Path, out_file: Path, megapixels: str, quality: str, pre
     tmp = resize_image(path, megapixels)
 
     # Builds ffmpeg command to encode image.
-    cmd = [
+    ffmpeg_cmd = [
         "ffmpeg", "-y",
         "-i", str(tmp),
         "-map", "0",                      # Copy metadata.
@@ -113,49 +120,22 @@ def process_image(path: Path, out_file: Path, megapixels: str, quality: str, pre
         str(out_file)
     ]
 
-    encode_OK = False
-    metadata_OK = False
-
-    # Runs ffmpeg command.
-    try:
-        subprocess.run(
-            cmd,
-            check=True,
-            stdout=subprocess.DEVNULL,    # Silence stdout.
-            stderr=subprocess.PIPE        # Capture stderr.
-        )
-        encode_OK = True
-    except subprocess.CalledProcessError as e: # Handles error.
-        print(f"{RED}[ERROR]{RESET} during ffmpeg execution:")
-        print(e.stderr.decode())
-
-    # Builds exiftool command to extract metadata
+    # Builds exiftool command to copy metadata.
     exiftool_cmd = [
         "exiftool",
-        "-tagsFromFile", str(tmp),
-        "-overwrite_original",  # Suppresses creation of a backup file
+        "-tagsFromFile", str(path),       # Original file metadata.
+        "-overwrite_original",            # Suppresses creation of a backup file.
         str(out_file)
     ]
 
-    # Copies image metadata using exiftool.
-    try:
-        subprocess.run(
-            exiftool_cmd,
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE
-        )
-        metadata_OK = True
-    except (subprocess.CalledProcessError, FileNotFoundError) as e:
-        if isinstance(e, FileNotFoundError):
-            print(f"{YELLOW}[WARNING]{RESET} 'exiftool' not found. Metadata not copied.")
-        else:
-            print(f"{YELLOW}[WARNING]{RESET} exiftool failed. Metadata may be incomplete.")
-            print(e.stderr.decode())
+    # Executes commands.
+    encode_OK = run_command(ffmpeg_cmd)
+    metadata_OK = run_command(exiftool_cmd)
 
-
-    msg = f"{GREEN}[OK]{RESET}" if encode_OK and metadata_OK else "{YELLOW}[WARN]{RESET} One step failed"
+    # Prints result.
+    msg = f"{GREEN}[OK]{RESET}" if encode_OK and metadata_OK else "{YELLOW}[WARN]{RESET} One step failed!"
     print(msg)
+
     # cleanup temp resize file if it was created.
     if str(tmp) != str(path) and os.path.exists(tmp):
         os.remove(tmp)
@@ -207,10 +187,6 @@ def main():
         print("Directory does not exist")
         sys.exit(1)
 
-    # Creates output directory.
-    output_dir = base_dir / (megapixels + "mp-" + quality + "q-" + preset + "p")
-    output_dir.mkdir(exist_ok=True)
-
     # Selects all images in input files, sorts and then counts them.
     images = [f for f in base_dir.iterdir() if f.suffix.lower() in IMAGE_EXTS and f.is_file()]
     images = sorted(images)
@@ -220,6 +196,10 @@ def main():
     if total == 0:
         print("No pictures were found")
         return
+
+    # Creates output directory.
+    output_dir = base_dir / (megapixels + "mp-" + quality + "q-" + preset + "p")
+    output_dir.mkdir(exist_ok=True)
     
     # Processes each image, printing current/remaining items to console.
     for idx, img in enumerate(images, start=1):
