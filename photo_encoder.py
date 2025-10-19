@@ -32,7 +32,7 @@ might result in encoding errors.
 
 # Auxiliary Functions.
 
-def resize_image(path: Path, megapixels: str) -> str:
+def resize_image(path: Path, megapixels: str) -> Path:
     """
     Resizes an image to fit within the given megapixel count, preserving aspect ratio.
     Returns the path of the resized temp image.
@@ -66,6 +66,16 @@ def resize_image(path: Path, megapixels: str) -> str:
             new_w = int(w * scale)
             new_h = int(h * scale)
 
+            # Only used in case new_w or new_h is bigger than max w,h supported by ffmpeg.
+            if max(new_w, new_h) > 8704:
+                max_scale = 8704 / max(new_w, new_h)
+                new_w = int(new_w * max_scale)
+                new_h = int(new_h * max_scale)
+
+            # Forces even width and height.
+            new_w = new_w - 1 if new_w % 2 != 0 else new_w
+            new_h = new_h - 1 if new_h % 2 != 0 else new_h
+
             # Prints new resolution.
             new_megapixels = (new_w * new_h) / 1_000_000
             print(f"[New Res] {RED}{new_w}x{new_h}{RESET} [{new_megapixels:.1f}MP]")
@@ -73,12 +83,19 @@ def resize_image(path: Path, megapixels: str) -> str:
             # Saves downscaled img to temp file, then returns it.
             resized = img.resize((new_w, new_h), Image.LANCZOS)
             tmp_path = path.stem + "_" + str(new_megapixels)[:3] + "MP_temp.jpg"
-            resized.save(tmp_path, format="JPEG", quality=100, subsampling=0, exif=exif)
+
+            # Writes temp file.
+            try:
+                resized.save(tmp_path, format="JPEG", quality=100, subsampling=0, exif=exif) # Normal write.
+            except:
+                resized = resized.convert("RGB")
+                resized.save(tmp_path, format="JPEG", quality=100, subsampling=0)
+
             return tmp_path
     # If process fails, returns path to the original image, no downscaling.
     except (IOError, OSError) as e:
         print(f"{YELLOW}[WARN]{RESET} Could not downscale image: {e}")
-        return str(path)
+        return path
 
 def run_command(cmd: list) -> bool:
     try:
@@ -134,7 +151,7 @@ def process_image(path: Path, out_file: Path, megapixels: str, quality: str, pre
     metadata_OK = run_command(exiftool_cmd)
 
     # Prints result.
-    msg = f"{GREEN}[OK]{RESET}" if encode_OK and metadata_OK else "{YELLOW}[WARN]{RESET} One step failed!"
+    msg = f"{GREEN}[OK]{RESET}" if encode_OK and metadata_OK else f"{YELLOW}[WARN]{RESET} One step failed!"
     print(msg)
 
     # cleanup temp resize file if it was created.
