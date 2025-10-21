@@ -185,8 +185,8 @@ def get_args():
     parser.add_argument(
         "-d",
         "--downscale",
-        default="200",
-        help="Downscale to x megapixels (default: 200)."
+        default="48",
+        help="Downscale to x megapixels (default: 48)."
     )
 
     args = parser.parse_args()
@@ -216,7 +216,7 @@ def main():
         return
 
     # Creates output directory.
-    output_dir = base_dir / (megapixels + "mp-" + quality + "q-" + preset + "p")
+    output_dir = base_dir / ("libsvtav1-" + quality + "-" + preset + "-" + megapixels + "mp")
     output_dir.mkdir(exist_ok=True)
     
     # Processes each image, printing current/remaining items to console.

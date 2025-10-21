@@ -177,7 +177,7 @@ def encode_video(vid, out_file, library, crf, preset, downscale):
 
     # Downscales to resolution if set.
     if downscale:
-        vf = f"scale='min({downscale},iw)':'min({downscale},ih)':force_original_aspect_ratio=decrease,format=yuv420p"
+        vf = f"scale='min({downscale},iw)':'min({downscale},ih)':force_original_aspect_ratio=decrease,format=yuv420p" #yuv420p10le
         cmd += ["-vf", vf]
         print_scaled_resolution(vid, downscale)
 
@@ -190,23 +190,21 @@ def encode_video(vid, out_file, library, crf, preset, downscale):
     # Used to determine audio stream bitrate.
     orig_bitrate = orig_audio_props[1]
 
-    # Caps max audio bitrate to 256kbps aac for H264 and H265.
+    # Caps max audio bitrate to 192kbps aac for H264 and H265.
     if library == "libx264" or library == "libx265":
-        if orig_bitrate == 0:
-            cmd += ["-c:a", "copy"] # In case audio exists but script wasn't able to detect it.
-        elif orig_bitrate <= 256:
+        if orig_bitrate <= 192 and orig_bitrate != 0:
             out_bitrate = str(orig_bitrate) + "k"
             cmd += ["-c:a", "libfdk_aac", "-b:a", out_bitrate]
-        elif orig_bitrate > 256:
-            cmd += ["-c:a", "libfdk_aac", "-b:a", "256k"]
+        else:
+            cmd += ["-c:a", "libfdk_aac", "-b:a", "192k"]
     
-    # Caps max audio bitrate to 128kbps or 64kbps opus for AV1.
+    # Caps max audio bitrate to 100kbps opus for AV1 (Approx. 500MB per 10 hours).
     if library == "libsvtav1":
-        if orig_bitrate <= 64:
+        if orig_bitrate <= 100 and orig_bitrate != 0:
             out_bitrate = str(orig_bitrate) + "k"
             cmd += ["-c:a", "libopus", "-b:a", out_bitrate]
         else:
-            cmd += ["-c:a", "libopus", "-b:a", "64k"]
+            cmd += ["-c:a", "libopus", "-b:a", "100k"]
 
     # Copies metadata and completes command.
     cmd += ['-map_metadata', '0',
@@ -332,7 +330,7 @@ def main():
         return
     
     # Creates output folder with arguments data.
-    output_dir = base_dir / (library + "-" + crf + "-" + preset)
+    output_dir = base_dir / (library + "-" + crf + "-" + preset + "-" + downscale + "p")
     output_dir.mkdir(exist_ok=True)
 
     # Iterates each video.

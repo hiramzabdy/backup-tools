@@ -109,7 +109,7 @@ def main():
 
         # Returns if original video wasn't found.
         if size_orig is None:
-            print(f"  {YELLOW}[WARN]{RESET} Original video not found.")
+            print(f"{YELLOW}[WARN]{RESET} Original video not found.")
             continue
 
         # Converts Bytes to Megabytes
@@ -126,7 +126,7 @@ def main():
 
         # Formats output
         print(
-            f"[{idx}/{total}]\n{status} - {orig_stem} - {mb_orig:.1f} MB => {mb_sec:.1f} MB, Δ {format_signed(diff_mb, ' MB')} ({format_signed(pct, '%')})"
+            f"[{idx}/{total}] {orig_stem} - {mb_orig:.1f} MB => {mb_sec:.1f} MB, Δ {format_signed(diff_mb, ' MB')} ({format_signed(pct, '%')}) {status}"
         )
 
         # Adds up the size of all videos so far.
@@ -141,7 +141,7 @@ def main():
     all_diff_percentage = (all_coded_size/all_original_size-1)*100
 
     # Print summary.
-    print(f"\nOriginal size: {all_original_size:.1f} MB\nNew size: {all_coded_size:.1f} MB\nDiference: {(all_original_size-all_coded_size):.1f} MB ({all_diff_percentage:.1f}%)\n")
+    print(f"\nOrg size: {all_original_size:.1f} MB\nNew size: {all_coded_size:.1f} MB\nDifference: {(all_original_size-all_coded_size):.1f} MB ({all_diff_percentage:.1f}%)\n")
     print(f"Videos bigger than margin ({margin}%): {len(vids_To_Delete)}")
 
     # Deleting logic

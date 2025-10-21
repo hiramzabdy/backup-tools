@@ -12,7 +12,7 @@ RED = '\033[91m'
 RESET = '\033[0m'
 
 # Extensions to process.
-IMAGE_EXTS = [".jpg", ".jpeg", ".heic", ".heif", ".webp", ".avif"]
+IMAGE_EXTS = [".jpg", ".jpeg", ".heic", ".heif", ".webp", ".avif", ".png"]
 VIDEO_EXTS = [".mp4", ".mov", ".mkv", ".avi", ".3gp"]
 
 # Auxiliary Functions.
@@ -254,9 +254,9 @@ def main():
             is_OK = (False, 0)
 
         # Case 1: No metadata at all => Appends name date.
-        if not meta_date or overwrite:
+        if not meta_date:
             print(f"{YELLOW}[WARN]{RESET} No metadata was found")
-            if fix:
+            if fix or overwrite:
                 print(f"Fixing... {item} => {name_date}")
                 if item.suffix.lower() in IMAGE_EXTS:
                     set_image_date(item, name_date)
