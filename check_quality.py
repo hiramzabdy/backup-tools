@@ -183,7 +183,11 @@ def main():
             all_results.append(vmaf)
             result = (f"{orig_video.name}: {br1:.2f} Mbps => {br2:.2f} Mbps, {GREEN}VMAF: {vmaf:.4f}{RESET}")
 
-        print(f"Result: {result}")
+        # Testing updating avg result every iteration.
+        average_result = sum(all_results) / len(all_results)
+        decimals = 2 if mode == "psnr" else 4
+        average_result = round(average_result, decimals)
+        print(f"Result: {result}, avg: {GREEN}{average_result}{RESET}")
     
     average_result = sum(all_results) / len(all_results)
     decimals = 2 if mode == "psnr" else 4

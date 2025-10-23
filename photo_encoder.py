@@ -58,7 +58,7 @@ def resize_image(path: Path, megapixels: str) -> Path:
             print(f"[Org Res] {w}x{h} [{megapixels:.1f}MP]")
 
             # Returns if no need for resizing.
-            if pixels <= target_pixels:
+            if pixels <= target_pixels and max(w, h) <= 8704:
                 return path
 
             # Scales width and heigth to match target MP.
