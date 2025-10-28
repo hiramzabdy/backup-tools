@@ -89,7 +89,7 @@ def resize_image(path: Path, megapixels: str) -> Path:
                 resized.save(tmp_path, format="JPEG", quality=100, subsampling=0, exif=exif) # Normal write.
             except:
                 resized = resized.convert("RGB")
-                resized.save(tmp_path, format="JPEG", quality=100, subsampling=0)
+                resized.save(tmp_path, format="JPEG", quality=100, subsampling=0, exif=exif) # Drops alpha channel.
 
             return tmp_path
     # If process fails, returns path to the original image, no downscaling.
@@ -98,6 +98,7 @@ def resize_image(path: Path, megapixels: str) -> Path:
         return path
 
 def run_command(cmd: list) -> bool:
+    "Runs a command provided as argument. Returns True if sucess, else False"
     try:
         subprocess.run(
             cmd,
@@ -142,6 +143,7 @@ def process_image(path: Path, out_file: Path, megapixels: str, quality: str, pre
     exiftool_cmd = [
         "exiftool",
         "-tagsFromFile", str(path),       # Original file metadata.
+        "-Orientation=",                  # Prevents rotation issue.
         "-overwrite_original",            # Suppresses creation of a backup file.
         str(out_file)
     ]
