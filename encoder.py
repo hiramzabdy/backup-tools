@@ -286,7 +286,7 @@ def get_args():
     parser.add_argument(
         "-q",
         "--crf",
-        default="40",
+        default="32",
         help="Codec quality level (default: 40)"
     )
     parser.add_argument(
@@ -298,9 +298,16 @@ def get_args():
     parser.add_argument(
         "-d",
         "--downscale",
-        choices=["480", "720", "1080", "1440", "2160", "false"],
+        choices=["240", "360", "480", "720", "900", "1080", "1440", "2160", "false"],
         default="false",
         help="Downscale to specific resolution (default: false)"
+    )
+    parser.add_argument(
+        "-r",
+        "--reverse",
+        choices=["true", "false"],
+        default="false",
+        help="false: older to newer. Default: false"
     )
     args = parser.parse_args()
     return args
@@ -314,6 +321,7 @@ def main():
     preset = args.preset
     extension = ".mkv" if library == "libsvtav1" else ".mp4"
     downscale = False if args.downscale == "false" else args.downscale
+    reverse_Order = False if args.reverse == "false" else True
 
     # Checks if input directory exists.
     if not base_dir.is_dir():
@@ -322,7 +330,7 @@ def main():
 
     # Selects all videos in input directory, sorts them and counts them.
     videos = [f for f in base_dir.iterdir() if f.suffix.lower() in VIDEO_EXTS and f.is_file()]
-    videos = sorted(videos)
+    videos = sorted(videos, reverse=reverse_Order)
     total = len(videos)
 
     # Returns if there are no videos.

@@ -190,6 +190,13 @@ def get_args():
         default="48",
         help="Downscale to x megapixels (default: 48)."
     )
+    parser.add_argument(
+        "-r",
+        "--reverse",
+        choices=["true", "false"],
+        default="false",
+        help="false: older to newer. Default: false"
+    )
 
     args = parser.parse_args()
     return args
@@ -201,6 +208,7 @@ def main():
     megapixels = args.downscale
     quality = args.quality
     preset = args.preset
+    reverse_Order = False if args.reverse == "false" else True
 
     # Checks if input directory exists.
     if not base_dir.is_dir():
@@ -209,7 +217,7 @@ def main():
 
     # Selects all images in input files, sorts and then counts them.
     images = [f for f in base_dir.iterdir() if f.suffix.lower() in IMAGE_EXTS and f.is_file()]
-    images = sorted(images)
+    images = sorted(images, reverse=reverse_Order)
     total = len(images)
 
     # Stops if no images were found.

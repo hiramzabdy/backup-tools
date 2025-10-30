@@ -181,7 +181,7 @@ def main():
                     vids_To_Delete.append(vid)
 
         # Decoding test.
-        if mode in ['code', 'both']:
+        if mode in ['decode', 'both']:
             ok_decode, errors = validate_decode(vid)
             if ok_decode:
                 print(f"  {GREEN}[OK]{RESET} Decoding successful.")
