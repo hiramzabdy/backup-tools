@@ -226,7 +226,7 @@ def main():
         return
 
     # Creates output directory.
-    output_dir = base_dir / ("libsvtav1-" + quality + "-" + preset + "-" + megapixels + "mp")
+    output_dir = ".." / base_dir / ("libsvtav1-" + quality + "-" + preset + "-" + megapixels + "mp")
     output_dir.mkdir(exist_ok=True)
     
     # Processes each image, printing current/remaining items to console.

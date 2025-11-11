@@ -20,7 +20,7 @@ For Original Quality (Pretty much unnoticeable compression):
 --library libsvtav1 --crf 24 --preset 2
 
 For Storage Savings (Somewhat noticable difference, not thoroughly tested):
---library libsvtav1 --crf 36, --preset 2
+--library libsvtav1 --crf 36, --preset 2 --downscale 1080
 
 For EXTREME Storage Savings (Noticable difference, still not potato-like videos):
 --library libsvtav1 --crf 44 --preset 1 --downscale 1080
@@ -32,6 +32,19 @@ This option turned a 350GB smartphones videos backup into a lite 9.3GB backup (2
 I tested this script using libsvtav1 3.x.x. If your libsvtav1 is in the 1.x.x version, I'd recommend
 manually compiling ffmpeg with a newer libsvtav1 version.
 3. I'll include more references here once I test each encoder more thoroughly.
+"""
+
+# Pixel count (in 9:16 aspect ratio), comparison vs 1080p.
+"""
+Resolution -  Pixel Count  - Description
+  180p =>    57,600 (  3%) - 
+  360p =>   230,400 ( 11%) -
+  540p =>   518,400 ( 25%) - 
+  720p =>   921,600 ( 45%) - HD
+  900p => 1,440,000 ( 70%) - HD+ (Recommended)
+ 1080p => 2,073,600 (100%) - Full-HD
+ 1440p => 3,686,400 (177%) - Quad-HD
+ 2160p => 8,294,400 (400%) - 4K UHD
 """
 
 # Auxiliary Functions.
@@ -117,6 +130,8 @@ def print_scaled_resolution(path, new_res):
 
     new_width = math.floor(width * scale_factor)
     new_height = math.floor(height * scale_factor)
+    new_width = new_width + 1 if new_width % 2 != 0 else new_width
+    new_height = new_height + 1 if new_height % 2 != 0 else new_height
     print(f"[Org res] {width}x{height}")
 
     if min(width, height) > new_res:
@@ -191,21 +206,21 @@ def encode_video(vid, out_file, library, crf, preset, downscale):
     # Used to determine audio stream bitrate.
     orig_bitrate = orig_audio_props[1]
 
-    # Caps max audio bitrate to 128kbps aac for H264 and H265.
+    # Caps max audio bitrate to 192kbps aac for H264 and H265.
     if library == "libx264" or library == "libx265":
-        if orig_bitrate <= 128 and orig_bitrate != 0:
+        if orig_bitrate <= 192 and orig_bitrate != 0:
             out_bitrate = str(orig_bitrate) + "k"
             cmd += ["-c:a", "libfdk_aac", "-b:a", out_bitrate]
         else:
-            cmd += ["-c:a", "libfdk_aac", "-b:a", "128k"]
+            cmd += ["-c:a", "libfdk_aac", "-b:a", "192k"]
     
-    # Caps max audio bitrate to 100kbps opus for AV1 (Approx. 500MB per 10 hours).
+    # Caps max audio bitrate to 128kbps opus for AV1 (Approx. 600MB per 10 hours).
     if library == "libsvtav1":
-        if orig_bitrate <= 100 and orig_bitrate != 0:
+        if orig_bitrate <= 128 and orig_bitrate != 0:
             out_bitrate = str(orig_bitrate) + "k"
             cmd += ["-c:a", "libopus", "-b:a", out_bitrate]
         else:
-            cmd += ["-c:a", "libopus", "-b:a", "100k"]
+            cmd += ["-c:a", "libopus", "-b:a", "128k"]
 
     # Copies metadata and completes command.
     cmd += ['-map_metadata', '0',
@@ -298,9 +313,9 @@ def get_args():
     parser.add_argument(
         "-d",
         "--downscale",
-        choices=["240", "360", "480", "720", "900", "1080", "1440", "2160", "false"],
-        default="false",
-        help="Downscale to specific resolution (default: false)"
+        choices=["240", "360", "480", "720", "900", "1080", "1440", "2160"],
+        default="2160",
+        help="Downscale to specific resolution (default: 2160)"
     )
     parser.add_argument(
         "-r",
@@ -339,7 +354,7 @@ def main():
         return
     
     # Creates output folder with arguments data.
-    output_dir = base_dir / (library + "-" + crf + "-" + preset + "-" + downscale + "p")
+    output_dir = ".." / base_dir / (library + "-" + crf + "-" + preset + "-" + downscale + "p")
     output_dir.mkdir(exist_ok=True)
 
     # Iterates each video.

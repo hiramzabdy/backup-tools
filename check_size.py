@@ -113,8 +113,8 @@ def main():
             continue
 
         # Converts Bytes to Megabytes
-        mb_orig = size_orig/(1024 * 1024)
-        mb_sec = size_sec/(1024 * 1024)
+        mb_orig = size_orig/(1000 * 1000)
+        mb_sec = size_sec/(1000 * 1000)
 
         # Compares both videos sizes.
         diff_mb = mb_sec - mb_orig
