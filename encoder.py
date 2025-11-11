@@ -354,7 +354,7 @@ def main():
         return
     
     # Creates output folder with arguments data.
-    output_dir = ".." / base_dir / (library + "-" + crf + "-" + preset + "-" + downscale + "p")
+    output_dir = base_dir / (library + "-" + crf + "-" + preset + "-" + downscale + "p")
     output_dir.mkdir(exist_ok=True)
 
     # Iterates each video.
