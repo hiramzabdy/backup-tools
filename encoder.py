@@ -98,7 +98,7 @@ def get_frame_rate(path):
         fps_val = 0.0
     return fps_val
 
-def print_scaled_resolution(path, new_res):
+def get_new_resolution(path, new_res):
     """
     Given a video path, prints its original and downscaled resolutions.
     """
@@ -136,6 +136,9 @@ def print_scaled_resolution(path, new_res):
 
     if min(width, height) > new_res:
         print(f"[New res] {RED}{new_width}x{new_height}{RESET}")
+        return (new_width, new_height)
+
+    return (width, height)
 
 def get_video_audio_info(path: Path):
     """
@@ -193,9 +196,11 @@ def encode_video(vid, out_file, library, crf, preset, downscale):
 
     # Downscales to resolution if set.
     if downscale:
-        vf = f"scale='if(gt(a,1),-2,{downscale})':'if(gt(a,1),{downscale},-2)',format=yuv420p" #yuv420p10le
+        dimensions = get_new_resolution(vid, downscale)
+        width = str(dimensions[0])
+        height = str(dimensions[1])
+        vf = f"scale='{width}':'{height}',format=yuv420p" #yuv420p10le
         cmd += ["-vf", vf]
-        print_scaled_resolution(vid, downscale)
 
     # Caps FPS range, since going above 240 or below 24 usually results in encoding error.
     if input_fps > 239:
