@@ -136,9 +136,11 @@ def get_new_resolution(path, new_res):
 
     if min(width, height) > new_res:
         print(f"[New res] {RED}{new_width}x{new_height}{RESET}")
-        return (new_width, new_height)
+        res = min(new_height, new_width)
+        return res
 
-    return (width, height)
+    res = min(width, height)
+    return res
 
 def get_video_audio_info(path: Path):
     """
@@ -196,10 +198,8 @@ def encode_video(vid, out_file, library, crf, preset, downscale):
 
     # Downscales to resolution if set.
     if downscale:
-        dimensions = get_new_resolution(vid, downscale)
-        width = str(dimensions[0])
-        height = str(dimensions[1])
-        vf = f"scale='{width}':'{height}',format=yuv420p" #yuv420p10le
+        res = get_new_resolution(vid, downscale)
+        vf = f"scale='if(gt(a,1),-2,{res})':'if(gt(a,1),{res},-2)',format=yuv420p" #yuv420p10le
         cmd += ["-vf", vf]
 
     # Caps FPS range, since going above 240 or below 24 usually results in encoding error.
