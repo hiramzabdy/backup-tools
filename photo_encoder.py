@@ -190,7 +190,6 @@ def process_image_webp(path: Path, out_file: Path, megapixels: str, quality: str
     exiftool_cmd = [
         "exiftool",
         "-tagsFromFile", str(path),
-        "-Orientation=",
         "-overwrite_original",
         str(out_file)
     ]
