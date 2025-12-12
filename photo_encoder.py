@@ -160,6 +160,53 @@ def process_image(path: Path, out_file: Path, megapixels: str, quality: str, pre
     if str(tmp) != str(path) and os.path.exists(tmp):
         os.remove(tmp)
 
+def process_image_webp(path: Path, out_file: Path, megapixels: str, quality: str, preset: str):
+    """
+    Resizes and encodes a single image into WebP format using cwebp (lossy).
+    """
+
+    # Skip if output exists.
+    if out_file.exists():
+        print(f"{YELLOW}[Skipping]{RESET} Output file exists.")
+        return
+
+    # Resize step (creates temp file if need be)
+    tmp = resize_image(path, megapixels)
+
+    # Build cwebp command.
+    # IMPORTANT: If resize_image already resized for us, we don't pass -resize to cwebp.
+    cwebp_cmd = [
+        "cwebp",
+        "-q", str(quality),
+        "-m", str(preset),
+        "-pass", "10",
+        "-mt",
+        "-metadata", "all",
+        str(tmp),
+        "-o", str(out_file)
+    ]
+
+    # Copy metadata with exiftool (optional but recommended)
+    exiftool_cmd = [
+        "exiftool",
+        "-tagsFromFile", str(path),
+        "-Orientation=",
+        "-overwrite_original",
+        str(out_file)
+    ]
+
+    # Execute commands
+    encode_OK = run_command(cwebp_cmd)
+    metadata_OK = run_command(exiftool_cmd)
+
+    # Print result
+    msg = f"{GREEN}[OK]{RESET}" if encode_OK and metadata_OK else f"{YELLOW}[WARN]{RESET} One step failed!"
+    print(msg)
+
+    # Cleanup temp resized file — but don't delete the original image
+    if str(tmp) != str(path) and os.path.exists(tmp):
+        os.remove(tmp)
+
 def get_args():
     parser = argparse.ArgumentParser(
         description="Image compressor using ffmpeg and libsvtav1 with standardized options."
@@ -171,6 +218,13 @@ def get_args():
         type=Path,
         required=True,
         help="Directory to process."
+    )
+    parser.add_argument(
+        "-l",
+        "--library",
+        choices=["av1", "webp"],
+        default="av1",
+        help="Codec to use, some args may differ."
     )
     parser.add_argument(
         "-q",
@@ -205,6 +259,7 @@ def main():
     # Assigns args to variables.
     args = get_args()
     base_dir = Path(args.input)
+    library = args.library
     megapixels = args.downscale
     quality = args.quality
     preset = args.preset
@@ -225,15 +280,27 @@ def main():
         print("No pictures were found")
         return
 
-    # Creates output directory.
-    output_dir = base_dir / ("libsvtav1-" + quality + "-" + preset + "-" + megapixels + "mp")
-    output_dir.mkdir(exist_ok=True)
+    if library == "av1":
+        # Creates output directory.
+        output_dir = base_dir / ("libsvtav1-" + quality + "-" + preset + "-" + megapixels + "mp")
+        output_dir.mkdir(exist_ok=True)
+        
+        # Processes each image, printing current/remaining items to console.
+        for idx, img in enumerate(images, start=1):
+            print(f"[{idx}/{total}] Processing: {img.name}")
+            out_file = output_dir / (img.stem + ".avif")
+            process_image(img, out_file, megapixels, quality, preset)
     
-    # Processes each image, printing current/remaining items to console.
-    for idx, img in enumerate(images, start=1):
-        print(f"[{idx}/{total}] Processing: {img.name}")
-        out_file = output_dir / (img.stem + ".avif")
-        process_image(img, out_file, megapixels, quality, preset)
+    if library == "webp":
+        # Creates output directory.
+        output_dir = base_dir / ("cwepb-" + quality + "-" + preset + "-" + megapixels + "mp")
+        output_dir.mkdir(exist_ok=True)
+        
+        # Processes each image, printing current/remaining items to console.
+        for idx, img in enumerate(images, start=1):
+            print(f"[{idx}/{total}] Processing: {img.name}")
+            out_file = output_dir / (img.stem + ".webp")
+            process_image_webp(img, out_file, megapixels, quality, preset)
 
 if __name__ == "__main__":
     main()
