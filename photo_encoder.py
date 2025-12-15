@@ -5,6 +5,7 @@ import subprocess
 import argparse
 from pathlib import Path
 from PIL import Image, ImageOps
+Image.MAX_IMAGE_PIXELS = None
 
 # ANSI color codes.
 GREEN = '\033[92m'
@@ -111,6 +112,58 @@ def run_command(cmd: list) -> bool:
         print(e.stderr.decode())
         return False
 
+def rotate_image(path: Path) -> bool:
+    try:
+        # Read numeric EXIF orientation
+        orientation = subprocess.check_output(
+            [
+                "exiftool",
+                "-Orientation#",
+                "-s3",
+                str(path)
+            ],
+            stderr=subprocess.DEVNULL,
+            text=True
+        ).strip()
+
+        rotate_map = {
+            "3": "180",
+            "6": "90",
+            "8": "270",
+        }
+
+        # Rotate pixels if needed
+        if orientation in rotate_map:
+            tmp_rotated = path.with_suffix(".tmp.webp")
+
+            subprocess.check_call(
+                [
+                    "convert",
+                    str(path),
+                    "-rotate", rotate_map[orientation],
+                    str(tmp_rotated)
+                ],
+                stderr=subprocess.DEVNULL
+            )
+
+            os.replace(tmp_rotated, path)
+
+        # Remove ONLY orientation tags (keep all other metadata)
+        subprocess.check_call(
+            [
+                "exiftool",
+                "-overwrite_original",
+                "-Orientation=",
+                str(path)
+            ],
+            stderr=subprocess.DEVNULL
+        )
+
+        return True
+
+    except subprocess.CalledProcessError:
+        return False
+
 # Main Functions.
 
 def process_image(path: Path, out_file: Path, megapixels: str, quality: str, preset: str):
@@ -143,7 +196,7 @@ def process_image(path: Path, out_file: Path, megapixels: str, quality: str, pre
     exiftool_cmd = [
         "exiftool",
         "-tagsFromFile", str(path),       # Original file metadata.
-        "-Orientation=",                  # Prevents rotation issue.
+        "-Orientation=",                  # Prevents rotation issue. (Maybe try without it?)
         "-overwrite_original",            # Suppresses creation of a backup file.
         str(out_file)
     ]
@@ -197,6 +250,7 @@ def process_image_webp(path: Path, out_file: Path, megapixels: str, quality: str
     # Execute commands
     encode_OK = run_command(cwebp_cmd)
     metadata_OK = run_command(exiftool_cmd)
+    rotation_OK = rotate_image(out_file)
 
     # Print result
     msg = f"{GREEN}[OK]{RESET}" if encode_OK and metadata_OK else f"{YELLOW}[WARN]{RESET} One step failed!"
