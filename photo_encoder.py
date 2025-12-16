@@ -5,7 +5,7 @@ import subprocess
 import argparse
 from pathlib import Path
 from PIL import Image, ImageOps
-Image.MAX_IMAGE_PIXELS = None
+Image.MAX_IMAGE_PIXELS = 200_000_000
 
 # ANSI color codes.
 GREEN = '\033[92m'
@@ -81,15 +81,19 @@ def resize_image(path: Path, megapixels: str) -> Path:
             # Alpha-safe format selection and temp save.
             has_alpha = img.mode in ("RGBA", "LA", "PA") or (img.mode == "P" and "transparency" in img.info)
 
-            # Saves as a png is image has transparency.
-            if has_alpha:
-                tmp_path = path.stem + "_" + str(new_megapixels)[:3] + "MP_temp.png"
-                img.save(tmp_path, format="PNG")
-            # Saves as a jpeg otherwise.
-            else:
-                tmp_path = path.stem + "_" + str(new_megapixels)[:3] + "MP_temp.jpg"
-                img = img.convert("RGB") if img.mode != "RGB" else img
-                img.save(tmp_path, format="JPEG", quality=100, subsampling=0)
+            # Build temp file path.
+            tmp_path = path.stem + "_" + str(new_megapixels)[:3] + "MP_temp.png"
+
+            # Ensure a PNG-compatible mode
+            if img.mode not in ("RGB", "RGBA"):
+                img = img.convert("RGBA" if has_alpha else "RGB")
+
+            # Lossless temp save
+            img.save(
+                tmp_path,
+                format="PNG",
+                optimize=False  # Faster, avoids extra CPU
+            )
 
             return Path(tmp_path)
         
@@ -148,7 +152,6 @@ def process_image(path: Path, out_file: Path, megapixels: str, quality: str, pre
         "-c:v", "libsvtav1",              # AV1 encoder.
         "-crf", str(quality),             # Quality.
         "-preset", str(preset),           # Speed/compression tradeoff.
-        "-pix_fmt", "yuv420p",            # yuv420p 8bits depth.
         str(out_file)
     ]
 
@@ -171,8 +174,8 @@ def process_image(path: Path, out_file: Path, megapixels: str, quality: str, pre
     metadata_msg = f"{GREEN}[OK]{RESET} Metadata" if metadata_OK else f"{RED}[ERROR]{RESET} Metadata copy failed"
     print(metadata_msg + "\n")
 
-    if not encode_OK and not metadata_OK:
-        print(out_file) # Pending work to automatically delete images with errors.
+    if not encode_OK:
+        out_file.unlink(missing_ok=True)
 
     # cleanup temp resize file if it was created.
     if str(tmp) != str(path) and os.path.exists(tmp):
