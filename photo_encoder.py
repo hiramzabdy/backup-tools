@@ -36,64 +36,64 @@ might result in encoding errors.
 def resize_image(path: Path, megapixels: str) -> Path:
     """
     Resizes an image to fit within the given megapixel count, preserving aspect ratio.
-    Returns the path of the resized temp image.
+    Returns the path of the img temp image.
     """
     try:
         with Image.open(path) as img:
-
-            # Stores metadata.
-            exif = img.info.get("exif")
+            # Rotates image.
+            img = ImageOps.exif_transpose(img)
 
             # Parses megapixels as int for calculations.
-            megapixels = int(megapixels)
-
-            # Converts target megapixels to pixels.
-            target_pixels = megapixels * 1_000_000
+            target_megapixels = int(megapixels)
+            target_pixels = target_megapixels * 1_000_000
 
             # Gets original size (w, h, pixels).
             w, h = img.size
-            pixels = (int(w) * int(h))
-
-            # Prints original resolution.
-            megapixels = pixels / 1_000_000
-            print(f"[Org Res] {w}x{h} [{megapixels:.1f}MP]")
-
-            # Returns if no need for resizing.
-            if pixels <= target_pixels and max(w, h) <= 8704:
-                return path
+            orig_pixels = (int(w) * int(h))
+            orig_megapixels = orig_pixels / 1_000_000
 
             # Scales width and heigth to match target MP.
-            scale = math.sqrt(target_pixels / pixels)
+            scale = 1 
+            if orig_pixels > target_pixels:
+                scale = math.sqrt(target_pixels / orig_pixels)
+
+            # Constraint: Max dimensions for some encoders
+            if max(w * scale, h * scale) > 8704:
+                scale = min(scale, 8704 / max(w, h))
+
             new_w = int(w * scale)
             new_h = int(h * scale)
 
-            # Only used in case new_w or new_h is bigger than max w,h supported by ffmpeg.
-            if max(new_w, new_h) > 8704:
-                max_scale = 8704 / max(new_w, new_h)
-                new_w = int(new_w * max_scale)
-                new_h = int(new_h * max_scale)
-
-            # Forces even width and height.
-            new_w = new_w - 1 if new_w % 2 != 0 else new_w
-            new_h = new_h - 1 if new_h % 2 != 0 else new_h
+            # Forces Even Dimensions (Critical for FFmpeg/yuv420p)
+            if new_w % 2 != 0: new_w -= 1
+            if new_h % 2 != 0: new_h -= 1
+            
+            if (new_w, new_h) != img.size:
+                img = img.resize((new_w, new_h), Image.LANCZOS)
 
             # Prints new resolution.
             new_megapixels = (new_w * new_h) / 1_000_000
-            print(f"[New Res] {RED}{new_w}x{new_h}{RESET} [{new_megapixels:.1f}MP]")
+            if scale != 1:
+                print(f"[Res] {w}x{h} [{orig_megapixels:.1f}MP] => {YELLOW}{new_w}x{new_h}{RESET} [{new_megapixels:.1f}MP]")
+            else:
+                print(f"[Res] {w}x{h} [{orig_megapixels:.1f}MP]")
 
-            # Saves downscaled img to temp file, then returns it.
-            resized = img.resize((new_w, new_h), Image.LANCZOS)
-            tmp_path = path.stem + "_" + str(new_megapixels)[:3] + "MP_temp.jpg"
+            # Alpha-safe format selection and temp save.
+            has_alpha = img.mode in ("RGBA", "LA", "PA") or (img.mode == "P" and "transparency" in img.info)
 
-            # Writes temp file.
-            try:
-                resized.save(tmp_path, format="JPEG", quality=100, subsampling=0, exif=exif) # Normal write.
-            except:
-                resized = resized.convert("RGB")
-                resized.save(tmp_path, format="JPEG", quality=100, subsampling=0, exif=exif) # Drops alpha channel.
+            # Saves as a png is image has transparency.
+            if has_alpha:
+                tmp_path = path.stem + "_" + str(new_megapixels)[:3] + "MP_temp.png"
+                img.save(tmp_path, format="PNG")
+            # Saves as a jpeg otherwise.
+            else:
+                tmp_path = path.stem + "_" + str(new_megapixels)[:3] + "MP_temp.jpg"
+                img = img.convert("RGB") if img.mode != "RGB" else img
+                img.save(tmp_path, format="JPEG", quality=100, subsampling=0)
 
-            return tmp_path
-    # If process fails, returns path to the original image, no downscaling.
+            return Path(tmp_path)
+        
+    # If process fails, returns the original Path.
     except (IOError, OSError) as e:
         print(f"{YELLOW}[WARN]{RESET} Could not downscale image: {e}")
         return path
@@ -112,63 +112,11 @@ def run_command(cmd: list) -> bool:
         print(e.stderr.decode())
         return False
 
-def rotate_image(path: Path) -> bool:
-    try:
-        # Read numeric EXIF orientation
-        orientation = subprocess.check_output(
-            [
-                "exiftool",
-                "-Orientation#",
-                "-s3",
-                str(path)
-            ],
-            stderr=subprocess.DEVNULL,
-            text=True
-        ).strip()
-
-        rotate_map = {
-            "3": "180",
-            "6": "90",
-            "8": "270",
-        }
-
-        # Rotate pixels if needed
-        if orientation in rotate_map:
-            tmp_rotated = path.with_suffix(".tmp.webp")
-
-            subprocess.check_call(
-                [
-                    "convert",
-                    str(path),
-                    "-rotate", rotate_map[orientation],
-                    str(tmp_rotated)
-                ],
-                stderr=subprocess.DEVNULL
-            )
-
-            os.replace(tmp_rotated, path)
-
-        # Remove ONLY orientation tags (keep all other metadata)
-        subprocess.check_call(
-            [
-                "exiftool",
-                "-overwrite_original",
-                "-Orientation=",
-                str(path)
-            ],
-            stderr=subprocess.DEVNULL
-        )
-
-        return True
-
-    except subprocess.CalledProcessError:
-        return False
-
 # Main Functions.
 
 def process_image(path: Path, out_file: Path, megapixels: str, quality: str, preset: str):
     """
-    Resizes and encodes a single image into AVIF format using libsvtav1.
+    Resizes and encodes a single image into AVIF or WEBP format.
     """
 
     # Returns if output file exists.
@@ -178,6 +126,18 @@ def process_image(path: Path, out_file: Path, megapixels: str, quality: str, pre
 
     # Creates temp img for resizing to max megapixels if needed.
     tmp = resize_image(path, megapixels)
+
+    # Builds cwebp command.
+    cwebp_cmd = [
+        "cwebp",
+        "-q", str(quality),
+        "-m", str(preset),
+        "-pass", "10",
+        "-mt",
+        "-metadata", "all",
+        str(tmp),
+        "-o", str(out_file)
+    ]
 
     # Builds ffmpeg command to encode image.
     ffmpeg_cmd = [
@@ -192,71 +152,29 @@ def process_image(path: Path, out_file: Path, megapixels: str, quality: str, pre
         str(out_file)
     ]
 
-    # Builds exiftool command to copy metadata.
+    # Builds exiftool command to copy metadata (in case image is img).
     exiftool_cmd = [
-        "exiftool",
-        "-tagsFromFile", str(path),       # Original file metadata.
-        "-Orientation=",                  # Prevents rotation issue. (Maybe try without it?)
-        "-overwrite_original",            # Suppresses creation of a backup file.
-        str(out_file)
+            "exiftool",
+            "-tagsFromFile", str(path),
+            "-overwrite_original",
+            "-Orientation=",     # DELETE orientation tag from output
+            "-ThumbnailImage=",  # Remove embedded thumbnails (save space)
+            str(out_file)
     ]
 
     # Executes commands.
-    encode_OK = run_command(ffmpeg_cmd)
-    metadata_OK = run_command(exiftool_cmd)
+    encode_OK = run_command(cwebp_cmd) if out_file.suffix == ".webp" else run_command(ffmpeg_cmd)
+    encode_msg = f"{GREEN}[OK]{RESET} Encode" if encode_OK else f"{RED}[ERROR]{RESET} Encode failed"
+    print(encode_msg)
 
-    # Prints result.
-    msg = f"{GREEN}[OK]{RESET}" if encode_OK and metadata_OK else f"{YELLOW}[WARN]{RESET} One step failed!"
-    print(msg)
+    metadata_OK = run_command(exiftool_cmd)
+    metadata_msg = f"{GREEN}[OK]{RESET} Metadata" if metadata_OK else f"{RED}[ERROR]{RESET} Metadata copy failed"
+    print(metadata_msg + "\n")
+
+    if not encode_OK and not metadata_OK:
+        print(out_file) # Pending work to automatically delete images with errors.
 
     # cleanup temp resize file if it was created.
-    if str(tmp) != str(path) and os.path.exists(tmp):
-        os.remove(tmp)
-
-def process_image_webp(path: Path, out_file: Path, megapixels: str, quality: str, preset: str):
-    """
-    Resizes and encodes a single image into WebP format using cwebp (lossy).
-    """
-
-    # Skip if output exists.
-    if out_file.exists():
-        print(f"{YELLOW}[Skipping]{RESET} Output file exists.")
-        return
-
-    # Resize step (creates temp file if need be)
-    tmp = resize_image(path, megapixels)
-
-    # Build cwebp command.
-    # IMPORTANT: If resize_image already resized for us, we don't pass -resize to cwebp.
-    cwebp_cmd = [
-        "cwebp",
-        "-q", str(quality),
-        "-m", str(preset),
-        "-pass", "10",
-        "-mt",
-        "-metadata", "all",
-        str(tmp),
-        "-o", str(out_file)
-    ]
-
-    # Copy metadata with exiftool (optional but recommended)
-    exiftool_cmd = [
-        "exiftool",
-        "-tagsFromFile", str(path),
-        "-overwrite_original",
-        str(out_file)
-    ]
-
-    # Execute commands
-    encode_OK = run_command(cwebp_cmd)
-    metadata_OK = run_command(exiftool_cmd)
-    rotation_OK = rotate_image(out_file)
-
-    # Print result
-    msg = f"{GREEN}[OK]{RESET}" if encode_OK and metadata_OK else f"{YELLOW}[WARN]{RESET} One step failed!"
-    print(msg)
-
-    # Cleanup temp resized file — but don't delete the original image
     if str(tmp) != str(path) and os.path.exists(tmp):
         os.remove(tmp)
 
@@ -275,9 +193,9 @@ def get_args():
     parser.add_argument(
         "-l",
         "--library",
-        choices=["av1", "webp"],
-        default="av1",
-        help="Codec to use, some args may differ."
+        choices=["avif", "webp"],
+        default="avif",
+        help="Library (format) to use"
     )
     parser.add_argument(
         "-q",
@@ -294,15 +212,15 @@ def get_args():
     parser.add_argument(
         "-d",
         "--downscale",
-        default="48",
-        help="Downscale to x megapixels (default: 48)."
+        default="12",
+        help="Downscale to x megapixels (default: 12)."
     )
     parser.add_argument(
         "-r",
         "--reverse",
         choices=["true", "false"],
         default="false",
-        help="false: older to newer. Default: false"
+        help="true: newer to older. Default: false"
     )
 
     args = parser.parse_args()
@@ -333,9 +251,10 @@ def main():
         print("No pictures were found")
         return
 
-    if library == "av1":
+    # Processing branch for AVIF.
+    if library == "avif":
         # Creates output directory.
-        output_dir = base_dir / ("libsvtav1-" + quality + "-" + preset + "-" + megapixels + "mp")
+        output_dir = base_dir / ("avif-" + quality + "q-" + preset + "p-" + megapixels + "mp")
         output_dir.mkdir(exist_ok=True)
         
         # Processes each image, printing current/remaining items to console.
@@ -344,16 +263,17 @@ def main():
             out_file = output_dir / (img.stem + ".avif")
             process_image(img, out_file, megapixels, quality, preset)
     
+    # Processing branch for WEBP
     if library == "webp":
         # Creates output directory.
-        output_dir = base_dir / ("cwepb-" + quality + "-" + preset + "-" + megapixels + "mp")
+        output_dir = base_dir / ("webp-" + quality + "q-" + preset + "p-" + megapixels + "mp")
         output_dir.mkdir(exist_ok=True)
         
         # Processes each image, printing current/remaining items to console.
         for idx, img in enumerate(images, start=1):
             print(f"[{idx}/{total}] Processing: {img.name}")
             out_file = output_dir / (img.stem + ".webp")
-            process_image_webp(img, out_file, megapixels, quality, preset)
+            process_image(img, out_file, megapixels, quality, preset)
 
 if __name__ == "__main__":
     main()
