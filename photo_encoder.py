@@ -5,6 +5,7 @@ import subprocess
 import argparse
 from pathlib import Path
 from PIL import Image, ImageOps
+from tempfile import NamedTemporaryFile
 Image.MAX_IMAGE_PIXELS = 200_000_000
 
 # ANSI color codes.
@@ -81,12 +82,18 @@ def resize_image(path: Path, megapixels: str) -> Path:
             # Alpha-safe format selection and temp save.
             has_alpha = img.mode in ("RGBA", "LA", "PA") or (img.mode == "P" and "transparency" in img.info)
 
-            # Build temp file path.
-            tmp_path = path.stem + "_" + str(new_megapixels)[:3] + "MP_temp.png"
-
             # Ensure a PNG-compatible mode
             if img.mode not in ("RGB", "RGBA"):
                 img = img.convert("RGBA" if has_alpha else "RGB")
+
+            # Create temp file NEXT TO ORIGINAL (same filesystem)
+            with NamedTemporaryFile(
+                suffix=".png",
+                dir=path.parent,
+                delete=False
+            ) as tmp:
+                tmp_path = Path(tmp.name)
+
 
             # Lossless temp save
             img.save(
@@ -131,6 +138,14 @@ def process_image(path: Path, out_file: Path, megapixels: str, quality: str, pre
     # Creates temp img for resizing to max megapixels if needed.
     tmp = resize_image(path, megapixels)
 
+    # Create a temp output file IN THE SAME DIRECTORY
+    with NamedTemporaryFile(
+        suffix=out_file.suffix,
+        dir=out_file.parent,
+        delete=False
+    ) as tmp_out:
+        tmp_out_path = Path(tmp_out.name)
+
     # Builds cwebp command.
     cwebp_cmd = [
         "cwebp",
@@ -140,7 +155,7 @@ def process_image(path: Path, out_file: Path, megapixels: str, quality: str, pre
         "-mt",
         "-metadata", "all",
         str(tmp),
-        "-o", str(out_file)
+        "-o", str(tmp_out_path)
     ]
 
     # Builds ffmpeg command to encode image.
@@ -152,7 +167,7 @@ def process_image(path: Path, out_file: Path, megapixels: str, quality: str, pre
         "-c:v", "libsvtav1",              # AV1 encoder.
         "-crf", str(quality),             # Quality.
         "-preset", str(preset),           # Speed/compression tradeoff.
-        str(out_file)
+        str(tmp_out_path)
     ]
 
     # Builds exiftool command to copy metadata (in case image is img).
@@ -170,16 +185,23 @@ def process_image(path: Path, out_file: Path, megapixels: str, quality: str, pre
     encode_msg = f"{GREEN}[OK]{RESET} Encode" if encode_OK else f"{RED}[ERROR]{RESET} Encode failed"
     print(encode_msg)
 
+    # Delete first temp file.
+    if tmp != path and tmp.exists():
+        tmp.unlink(missing_ok=True)
+
+    # Delete second temp file on error.
+    if not encode_OK:
+        tmp_out_path.unlink(missing_ok=True)
+        return
+    
+    # Write second temp file to output dir.
+    tmp_out_path.replace(out_file)
+    tmp_out_path.unlink(missing_ok=True)
+
+    # Copy metadata to final file.
     metadata_OK = run_command(exiftool_cmd)
     metadata_msg = f"{GREEN}[OK]{RESET} Metadata" if metadata_OK else f"{RED}[ERROR]{RESET} Metadata copy failed"
     print(metadata_msg + "\n")
-
-    if not encode_OK:
-        out_file.unlink(missing_ok=True)
-
-    # cleanup temp resize file if it was created.
-    if str(tmp) != str(path) and os.path.exists(tmp):
-        os.remove(tmp)
 
 def get_args():
     parser = argparse.ArgumentParser(
