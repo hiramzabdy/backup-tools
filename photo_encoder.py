@@ -34,7 +34,7 @@ might result in encoding errors.
 
 # Auxiliary Functions.
 
-def resize_image(path: Path, megapixels: str) -> Path:
+def resize_image(path: Path, megapixels: str, max_dim: int) -> Path:
     """
     Resizes an image to fit within the given megapixel count, preserving aspect ratio.
     Returns the path of the img temp image.
@@ -59,8 +59,8 @@ def resize_image(path: Path, megapixels: str) -> Path:
                 scale = math.sqrt(target_pixels / orig_pixels)
 
             # Constraint: Max dimensions for some encoders
-            if max(w * scale, h * scale) > 8704:
-                scale = min(scale, 8704 / max(w, h))
+            if max_dim != 0 and max(w * scale, h * scale) > max_dim:
+                scale = min(scale, max_dim / max(w, h))
 
             new_w = int(w * scale)
             new_h = int(h * scale)
@@ -89,7 +89,7 @@ def resize_image(path: Path, megapixels: str) -> Path:
             # Create temp file NEXT TO ORIGINAL (same filesystem)
             with NamedTemporaryFile(
                 suffix=".png",
-                dir=path.parent,
+                dir=path.parent / ("temp"),
                 delete=False
             ) as tmp:
                 tmp_path = Path(tmp.name)
@@ -125,7 +125,7 @@ def run_command(cmd: list) -> bool:
 
 # Main Functions.
 
-def process_image(path: Path, out_file: Path, megapixels: str, quality: str, preset: str):
+def process_image(path: Path, out_file: Path, megapixels: str, quality: str, preset: str, max_dim: int):
     """
     Resizes and encodes a single image into AVIF or WEBP format.
     """
@@ -136,12 +136,12 @@ def process_image(path: Path, out_file: Path, megapixels: str, quality: str, pre
         return
 
     # Creates temp img for resizing to max megapixels if needed.
-    tmp = resize_image(path, megapixels)
+    tmp = resize_image(path, megapixels, max_dim)
 
     # Create a temp output file IN THE SAME DIRECTORY
     with NamedTemporaryFile(
         suffix=out_file.suffix,
-        dir=out_file.parent,
+        dir=path.parent / ("temp"),
         delete=False
     ) as tmp_out:
         tmp_out_path = Path(tmp_out.name)
@@ -260,6 +260,7 @@ def main():
     quality = args.quality
     preset = args.preset
     reverse_Order = False if args.reverse == "false" else True
+    max_dim = 8704 if library == "avif" else 16382
 
     # Checks if input directory exists.
     if not base_dir.is_dir():
@@ -275,6 +276,10 @@ def main():
     if total == 0:
         print("No pictures were found")
         return
+    
+    # Creates temp dir.
+    output_dir = base_dir / "temp"
+    output_dir.mkdir(exist_ok=True)
 
     # Processing branch for AVIF.
     if library == "avif":
@@ -286,7 +291,7 @@ def main():
         for idx, img in enumerate(images, start=1):
             print(f"[{idx}/{total}] Processing: {img.name}")
             out_file = output_dir / (img.stem + ".avif")
-            process_image(img, out_file, megapixels, quality, preset)
+            process_image(img, out_file, megapixels, quality, preset, max_dim)
     
     # Processing branch for WEBP
     if library == "webp":
@@ -298,7 +303,7 @@ def main():
         for idx, img in enumerate(images, start=1):
             print(f"[{idx}/{total}] Processing: {img.name}")
             out_file = output_dir / (img.stem + ".webp")
-            process_image(img, out_file, megapixels, quality, preset)
+            process_image(img, out_file, megapixels, quality, preset, max_dim)
 
 if __name__ == "__main__":
     main()
