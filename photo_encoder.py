@@ -17,21 +17,6 @@ RESET = '\033[0m'
 # Extensions.
 IMAGE_EXTS = [".jpg", ".jpeg", ".heic", ".heif", ".webp", ".avif", ".png"]
 
-# Notes:
-"""
-For Orignal Quality (Pretty much unnoticeable compression):
---quality 24 --preset 2 --megapixels 48
-
-For Storage Savings (Somewhat noticeable difference):
---quality 32 --preset 2 --megapixels 20
-
-For EXTREME Storage Savings (Noticeable difference, still not radio-like photos):
---quality 40 --preset 1 --megapixels 12
-
-1. Running multiple instances of the script with the same params (running on the same output directory)
-might result in encoding errors.
-"""
-
 # Auxiliary Functions.
 
 def resize_image(path: Path, megapixels: str, max_dim: int) -> Path:
@@ -177,31 +162,26 @@ def process_image(path: Path, out_file: Path, megapixels: str, quality: str, pre
             "-overwrite_original",
             "-Orientation=",     # DELETE orientation tag from output
             "-ThumbnailImage=",  # Remove embedded thumbnails (save space)
-            str(out_file)
+            str(tmp_out_path)
     ]
 
     # Executes commands.
     encode_OK = run_command(cwebp_cmd) if out_file.suffix == ".webp" else run_command(ffmpeg_cmd)
     encode_msg = f"{GREEN}[OK]{RESET} Encode" if encode_OK else f"{RED}[ERROR]{RESET} Encode failed"
     print(encode_msg)
-
-    # Delete first temp file.
-    if tmp != path and tmp.exists():
-        tmp.unlink(missing_ok=True)
-
-    # Delete second temp file on error.
-    if not encode_OK:
-        tmp_out_path.unlink(missing_ok=True)
-        return
     
-    # Write second temp file to output dir.
-    tmp_out_path.replace(out_file)
-    tmp_out_path.unlink(missing_ok=True)
-
     # Copy metadata to final file.
     metadata_OK = run_command(exiftool_cmd)
     metadata_msg = f"{GREEN}[OK]{RESET} Metadata" if metadata_OK else f"{RED}[ERROR]{RESET} Metadata copy failed"
     print(metadata_msg + "\n")
+
+    # Write second temp file to output dir.
+    if encode_OK and metadata_OK:
+        tmp_out_path.replace(out_file)
+
+    # Delete both temp files
+    tmp_out_path.unlink(missing_ok=True)
+    tmp.unlink(missing_ok=True)
 
 def get_args():
     parser = argparse.ArgumentParser(
