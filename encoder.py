@@ -3,6 +3,7 @@ import subprocess
 import argparse
 import math
 from pathlib import Path
+from typing import Tuple, Optional, Union
 
 # ANSI color codes.
 GREEN = '\033[92m'
@@ -41,7 +42,7 @@ Resolution -  Pixel Count  - Description
 
 # Auxiliary Functions.
 
-def get_duration(path):
+def get_duration(path: Union[Path, str]) -> float:
     """
     Given a video path, gets its duration and returns it as a float
     """
@@ -55,10 +56,10 @@ def get_duration(path):
     result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     try:
         return float(result.stdout.strip())
-    except:
+    except Exception:
         return 0.0
 
-def seconds_to_mmss(seconds):
+def seconds_to_mmss(seconds: Union[int, float]) -> str:
     """
     Receives a duration in seconds (possibly greater than 60) and returns it in mm:ss format.
     """
@@ -66,7 +67,7 @@ def seconds_to_mmss(seconds):
     s = int(seconds % 60)
     return f"{m:02d}:{s:02d}"
 
-def get_frame_rate(path):
+def get_frame_rate(path: Union[Path, str]) -> float:
     """
     Given a video path, gets its framerate and returns it as a float.
     """
@@ -86,11 +87,11 @@ def get_frame_rate(path):
             fps_val = float(num) / float(den) if float(den) != 0 else 0.0
         else:
             fps_val = float(fr)
-    except:
+    except Exception:
         fps_val = 0.0
     return fps_val
 
-def get_new_resolution(path, new_res):
+def get_new_resolution(path: Union[Path, str], new_res: Union[int, str]) -> int:
     """
     Given a video path, prints its original and downscaled resolutions.
     """
@@ -100,7 +101,7 @@ def get_new_resolution(path, new_res):
         '-v', 'error',
         '-show_entries', 'stream=width,height',
         '-of', 'default=noprint_wrappers=1:nokey=1',
-        path
+        str(path)
     ]
     result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
@@ -134,7 +135,7 @@ def get_new_resolution(path, new_res):
     res = min(width, height)
     return res
 
-def get_video_audio_info(path: Path):
+def get_video_audio_info(path: Path) -> Tuple[str, int]:
     """
     Returns the audio codec and bitrate (in kbps) of a video file.
     Returns ("Undefined", 0) if no audio codec found.
@@ -154,8 +155,8 @@ def get_video_audio_info(path: Path):
         if res.returncode != 0 or not res.stdout.strip():
             return ("Undefined", 0)
 
-        codec_name = None
-        bitrate = None
+        codec_name: Optional[str] = None
+        bitrate: Optional[int] = None
 
         for line in res.stdout.splitlines():
             if line.startswith("codec_name="):
@@ -163,11 +164,14 @@ def get_video_audio_info(path: Path):
             elif line.startswith("bit_rate="):
                 try:
                     bitrate = int(line.split("=", 1)[1].strip())
-                    bitrate = int(bitrate/1000)
+                    bitrate = int(bitrate / 1000)
                 except ValueError:
                     bitrate = None
 
-        return (codec_name, bitrate)
+        # Normalize return types to (str, int)
+        codec_name_final = codec_name if codec_name else "Undefined"
+        bitrate_final = int(bitrate) if bitrate else 0
+        return (codec_name_final, bitrate_final)
 
     except FileNotFoundError:
         print("Error: ffprobe not found. Please install FFmpeg.")
@@ -178,7 +182,15 @@ def get_video_audio_info(path: Path):
 
 # Main Functions.
 
-def encode_video(vid, out_file, library, crf, preset, downscale, audio_bitrate):
+def encode_video(
+    vid: Path,
+    out_file: Path,
+    library: str,
+    crf: Union[str, int],
+    preset: Union[str, int],
+    downscale: Union[bool, str, int],
+    audio_bitrate: Union[str, int]
+) -> None:
     # Assigns args to variables.
     duration = get_duration(vid)
     total_mmss = seconds_to_mmss(duration)
@@ -201,13 +213,19 @@ def encode_video(vid, out_file, library, crf, preset, downscale, audio_bitrate):
         cmd += ['-r', str(24)]
 
     # Used to determine audio stream bitrate.
-    orig_bitrate = orig_audio_props[1]
-    
-    # Caps max audio bitrate to 128kbps opus (Approx. 600MB per 10 hours).
-    if orig_bitrate <= int(audio_bitrate) and orig_bitrate != 0:
-        ab = str(orig_bitrate) + "k"
+    orig_bitrate = int(orig_audio_props[1])
+
+    # Normalize audio_bitrate to int for comparisons
+    try:
+        audio_bitrate_int = int(audio_bitrate)
+    except Exception:
+        audio_bitrate_int = 128
+
+    # Caps max audio bitrate to provided max (in kbps).
+    if orig_bitrate != 0 and orig_bitrate <= audio_bitrate_int:
+        ab = f"{orig_bitrate}k"
     else:
-        ab = str(audio_bitrate) + "k"
+        ab = f"{audio_bitrate_int}k"
     cmd += ["-c:a", "libopus", "-b:a", ab]
 
     # Copies metadata and completes command.
