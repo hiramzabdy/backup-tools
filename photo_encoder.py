@@ -89,10 +89,10 @@ def resize_image(path: Path, megapixels: str, max_dim: int) -> Path:
 
             return Path(tmp_path)
         
-    # If process fails, returns the original Path.
+    # If process fails, returns False, so encoding doesn't continue
     except (IOError, OSError) as e:
         print(f"{YELLOW}[WARN]{RESET} Could not downscale image: {e}")
-        return path
+        return False
 
 def run_command(cmd: list) -> bool:
     "Runs a command provided as argument. Returns True if sucess, else False"

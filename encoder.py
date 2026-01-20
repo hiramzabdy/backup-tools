@@ -16,16 +16,8 @@ VIDEO_EXTS = [".mp4", ".mkv", ".mov", ".avi", ".3gp"]
 # Recomended values.
 """
 For Original Quality (Pretty much unnoticeable compression):
---library libx265 --crf 18 --preset slow
---library libsvtav1 --crf 24 --preset 2
-
-For Storage Savings (Somewhat noticable difference, not thoroughly tested):
---library libsvtav1 --crf 36, --preset 2 --downscale 1080
-
-For EXTREME Storage Savings (Noticable difference, still not potato-like videos):
---library libsvtav1 --crf 44 --preset 1 --downscale 1080
-
-This option turned a 350GB smartphones videos backup into a lite 9.3GB backup (2.6% of the original size).
+--library libx265   --crf 18 --preset medium/slow
+--library libsvtav1 --crf 24 --preset 2/4
 
 1. For libx265 (hevc), going past slow (i.e. slower, veryslow) doesn't always increase compression efficiency.
 2. Newer versions of libsvtav1 are way faster to encode and provide better efficiency.
@@ -186,7 +178,7 @@ def get_video_audio_info(path: Path):
 
 # Main Functions.
 
-def encode_video(vid, out_file, library, crf, preset, downscale):
+def encode_video(vid, out_file, library, crf, preset, downscale, audio_bitrate):
     # Assigns args to variables.
     duration = get_duration(vid)
     total_mmss = seconds_to_mmss(duration)
@@ -210,22 +202,13 @@ def encode_video(vid, out_file, library, crf, preset, downscale):
 
     # Used to determine audio stream bitrate.
     orig_bitrate = orig_audio_props[1]
-
-    # Caps max audio bitrate to 192kbps aac for H264 and H265.
-    if library == "libx264" or library == "libx265":
-        if orig_bitrate <= 192 and orig_bitrate != 0:
-            out_bitrate = str(orig_bitrate) + "k"
-            cmd += ["-c:a", "libfdk_aac", "-b:a", out_bitrate]
-        else:
-            cmd += ["-c:a", "libfdk_aac", "-b:a", "192k"]
     
-    # Caps max audio bitrate to 128kbps opus for AV1 (Approx. 600MB per 10 hours).
-    if library == "libsvtav1":
-        if orig_bitrate <= 128 and orig_bitrate != 0:
-            out_bitrate = str(orig_bitrate) + "k"
-            cmd += ["-c:a", "libopus", "-b:a", out_bitrate]
-        else:
-            cmd += ["-c:a", "libopus", "-b:a", "128k"]
+    # Caps max audio bitrate to 128kbps opus (Approx. 600MB per 10 hours).
+    if orig_bitrate <= int(audio_bitrate) and orig_bitrate != 0:
+        ab = str(orig_bitrate) + "k"
+    else:
+        ab = str(audio_bitrate) + "k"
+    cmd += ["-c:a", "libopus", "-b:a", ab]
 
     # Copies metadata and completes command.
     cmd += ['-map_metadata', '0',
@@ -318,9 +301,16 @@ def get_args():
     parser.add_argument(
         "-d",
         "--downscale",
-        choices=["240", "360", "480", "720", "900", "1080", "1440", "2160"],
+        choices=["180", "360", "540", "720", "900", "1080", "1440", "2160"],
         default="2160",
         help="Downscale to specific resolution (default: 2160)"
+    )
+    parser.add_argument(
+        "-a",
+        "--audiobitrate",
+        choices=["32", "64", "96", "128", "160", "192", "256"],
+        default="128",
+        help="Set max audio bitrate (default: 128)"
     )
     parser.add_argument(
         "-r",
@@ -339,6 +329,7 @@ def main():
     library = args.library
     crf = args.crf
     preset = args.preset
+    audio_bitrate = args.audiobitrate
     extension = ".mkv" if library == "libsvtav1" else ".mp4"
     downscale = False if args.downscale == "false" else args.downscale
     reverse_Order = False if args.reverse == "false" else True
@@ -373,7 +364,7 @@ def main():
             print(f"{YELLOW}[Skipping]{RESET}")
             continue
 
-        encode_video(vid, out_file, library, crf, preset, downscale)
+        encode_video(vid, out_file, library, crf, preset, downscale, audio_bitrate)
 
 if __name__ == '__main__':
     main()
