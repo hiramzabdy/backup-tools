@@ -277,13 +277,13 @@ def encode_video(
         print(f"\r[100%] {total_mmss}/{total_mmss} - Vel: {fps} FPS - BR: {bitrate}")
 
         if proc.returncode == 0:
-            print(f"{GREEN}[OK]{RESET}")
+            print(f"{GREEN}[OK]{RESET}\n")
         else:
             raise subprocess.CalledProcessError(proc.returncode, cmd)
 
     except Exception as e:
         print(f"{RED}[ERROR]{RESET}")
-        print(e)
+        print(e + "\n")
 
 def get_args():
     parser = argparse.ArgumentParser(
@@ -368,7 +368,7 @@ def main():
         return
     
     # Creates output folder with arguments data.
-    output_dir = base_dir / (library + "-" + crf + "-" + preset + "-" + downscale + "p")
+    output_dir = base_dir / (library + "-" + crf + "-" + preset + "-" + downscale + "p-" + audio_bitrate + "k")
     output_dir.mkdir(exist_ok=True)
 
     # Iterates each video.
